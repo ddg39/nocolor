@@ -1,0 +1,24 @@
+description: |
+  503 `SERVICE_UNAVAILABLE`。一時的に処理できない。
+  メール送信キューが満杯の場合（API-03、05、08）は `ServiceUnavailableQueueFull`、MinIO に保存できない場合など
+  API 固有の条件がある場合（API-13、24）は、その API の 503 の説明を見る（この共通応答ではなく別に定義している）。
+  `Retry-After` を付けてよい（任意）。
+headers:
+  Retry-After:
+    description: 再試行できるまでの秒数（任意）。
+    required: false
+    schema:
+      type: integer
+      minimum: 1
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      serviceUnavailable:
+        value:
+          error:
+            code: SERVICE_UNAVAILABLE
+            message: 現在処理できません。しばらくしてからお試しください。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

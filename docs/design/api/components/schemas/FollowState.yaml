@@ -1,0 +1,19 @@
+type: object
+title: FollowState
+description: |
+  フォローの操作後の状態（API-20、21）。`following` は操作後の状態で、API-20 では常に `true`、API-21 では常に `false`。
+  `follower_count` は操作後の**対象のユーザー**のフォロワー数。
+required:
+  - following
+  - follower_count
+properties:
+  following:
+    type: boolean
+    description: 操作後の状態（API-20 は常に `true`、API-21 は常に `false`）。
+  follower_count:
+    type: integer
+    minimum: 0
+    description: 操作後の、**対象のユーザー**のフォロワー数。
+examples:
+  - following: true
+    follower_count: 57

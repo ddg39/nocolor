@@ -1,0 +1,15 @@
+description: |
+  500 `INTERNAL_ERROR`。想定外の障害。`message` に内部情報（SQL、パス、スタックトレース）を含めない。
+  調査には `request_id`（応答ヘッダー `X-Request-Id` と同じ値）を使う。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      internalError:
+        value:
+          error:
+            code: INTERNAL_ERROR
+            message: サーバーでエラーが発生しました。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

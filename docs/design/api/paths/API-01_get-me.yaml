@@ -1,0 +1,65 @@
+operationId: getMe
+summary: API-01 現在のユーザーの取得
+x-api-id: API-01
+tags:
+  - Me
+description: |
+  `GET /api/me`（R-01）
+
+  ## 概要
+
+  ログイン状態を判定する。アプリ起動時に呼ぶ。ログイン中は CSRF トークン（README 1.4）も返す。
+  **未ログインでも 200 を返す**（`user` と `csrf_token` が `null`）。
+
+  ## 備考
+
+  - 関連要件 ID: 3 章, 6.2
+  - 利用画面: 全画面（ヘッダー・ガード）。SCR-02, 05, 06 のログイン済み判定
+  - 使用テーブル: `sessions`、`users`（`GetSessionWithUser`）。
+  - 副作用なし。Cookie が付いていたのに無効だった場合は、応答で Cookie を削除する。
+  - `Cache-Control: no-store`（トークンを含むため）。
+  - 共通エラー: 想定外の障害は 500 `INTERNAL_ERROR`、一時的に処理できない場合は 503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドは 404 `NOT_FOUND`・405 `METHOD_NOT_ALLOWED`（README 1.1。個別の API には載せない）。
+security:
+  - {}
+  - sessionCookie: []
+responses:
+  "200":
+    description: |
+      ログイン状態。ログイン中は `user` と `csrf_token` が入り、未ログインは両方 `null`。
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - user
+            - csrf_token
+          properties:
+            user:
+              description: ログイン中のユーザー。未ログインは `null`。
+              oneOf:
+                - $ref: ../components/schemas/UserBrief.yaml
+                - type: "null"
+            csrf_token:
+              type: [string, "null"]
+              description: |
+                CSRF トークン（README 1.4）。ログイン中のみ。`Base64URL(HMAC-SHA256(csrf_key, Cookie の値))` で、43 文字。
+                ログイン必須の変更系 API の `X-CSRF-Token` ヘッダーに付ける。ログインし直すと値が変わる。
+        examples:
+          loggedIn:
+            summary: ログイン中
+            value:
+              user:
+                username: alice
+                display_name: Alice
+                icon_url: /images/avatars/9b2e7c40-1d3a-4f5b-8c6d-2a1e0f9b7d33.jpg
+              csrf_token: q8Yx0m2kZp7Lw3Nf9RtV1sBc5HdGe6JaUoXiYb4MqKc
+          loggedOut:
+            summary: 未ログイン
+            value:
+              user: null
+              csrf_token: null
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

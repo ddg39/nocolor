@@ -1,0 +1,16 @@
+description: |
+  413。画像を含む multipart の API（API-13、24）で、`code` は次のいずれか。
+  - `IMAGE_TOO_LARGE`: 画像のファイルサイズが `max_image_bytes`（API-02）を超える（PST-02）。
+  - `REQUEST_TOO_LARGE`: multipart の画像以外の部分が大きすぎる（全体の上限は `max_image_bytes` + 64KiB まで。README 1.1）。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      imageTooLarge:
+        value:
+          error:
+            code: IMAGE_TOO_LARGE
+            message: 画像のサイズが上限を超えています。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

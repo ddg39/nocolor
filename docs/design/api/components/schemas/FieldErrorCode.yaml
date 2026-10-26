@@ -1,0 +1,26 @@
+type: string
+title: FieldErrorCode
+description: |
+  項目別コード。`Error.error.fields` の値である（README 1.6）。画面はこの値で項目ごとの文言を決める。
+
+  | コード | 意味 | 使う項目 |
+  | --- | --- | --- |
+  | `REQUIRED` | 未指定、または（前後の空白を除いて）空 | 必須の項目すべて |
+  | `TOO_SHORT` | 最小文字数に満たない | `username`、`password` |
+  | `TOO_LONG` | 最大文字数を超える | `email`、`username`、`password`、`display_name`、`bio`、`caption` |
+  | `INVALID_FORMAT` | 形式が不正 | `email` |
+  | `INVALID_CHARS` | 使えない文字を含む | `username`、`display_name`、`bio`、`caption` |
+  | `NEED_LETTER_AND_DIGIT` | 英字と数字を 1 文字以上ずつ含まない | `password` |
+  | `INVALID_VALUE` | 値が許される範囲・列挙にない | `limit`、`icon_action` |
+  | `UNEXPECTED` | 指定してはいけない組み合わせ（例: `icon_action` が `keep` なのに `icon` がある） | `icon` |
+  | `TAKEN` | 使用済み（409 のとき） | `username` |
+enum:
+  - REQUIRED
+  - TOO_SHORT
+  - TOO_LONG
+  - INVALID_FORMAT
+  - INVALID_CHARS
+  - NEED_LETTER_AND_DIGIT
+  - INVALID_VALUE
+  - UNEXPECTED
+  - TAKEN

@@ -1,0 +1,15 @@
+description: |
+  404 `USER_NOT_FOUND`。ユーザーが存在しない、仮登録のまま（作成から 7 日を超えた仮登録を含む）、
+  またはパスのユーザー名の形式が不正（形式不正は DB を引かずに返す。screens D-25）。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      userNotFound:
+        value:
+          error:
+            code: USER_NOT_FOUND
+            message: ユーザーが見つかりません。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

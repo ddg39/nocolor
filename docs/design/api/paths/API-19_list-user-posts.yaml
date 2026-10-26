@@ -1,0 +1,69 @@
+operationId: listUserPosts
+summary: API-19 ユーザーの投稿一覧
+x-api-id: API-19
+tags:
+  - Users
+description: |
+  `GET /api/users/{username}/posts`（R-19）
+
+  ## 概要
+
+  ユーザーの投稿を新着順に返す（PRF-02）。カーソル方式のページング（README 1.7）。
+
+  - 関連要件 ID: PRF-02, TML-05, TML-06, LIK-03
+  - 利用画面: SCR-10
+  - ログイン: 任意。ログインしていれば各投稿の `liked_by_me` を閲覧者について返す。Cookie が無効なら未ログインとして扱う（README 1.3）。
+
+  ## レスポンス
+
+  成功時は 200（README 1.7 の形式。`items` は Post）。`author` は全項目で同じユーザーになるが、形を揃えるため含める。
+
+  ## 備考
+
+  - 使用テーブル: `posts`、`users`、`likes`（`ListPostsByUser`）。副作用なし。
+  - パスの `username` の形式が不正なときは、DB を引かずに 404 `USER_NOT_FOUND` を返す（README 1.1）。
+  - 共通エラー: 想定外の障害は 500 `INTERNAL_ERROR`、一時的に処理できない場合は 503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security:
+  - {}
+  - sessionCookie: []
+parameters:
+  - $ref: ../components/parameters/username.yaml
+  - $ref: ../components/parameters/cursor.yaml
+  - $ref: ../components/parameters/limit.yaml
+responses:
+  "200":
+    description: |
+      そのユーザーの投稿の一覧。新着順（`posts.id` の降順）。次のページが無いときは `next_cursor` が `null`。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/PostPage.yaml
+        examples:
+          page:
+            value:
+              items:
+                - id: 01JC8ZQ4V6S2R9T3M7X5N1B0KD
+                  image_url: /images/posts/3f1c2a9e-7b0d-4c8a-9d52-1e6f0a7b4c11.jpg
+                  image_width: 2400
+                  image_height: 1600
+                  thumbnail_url: /images/thumbs/a81d5e07-93c2-4b6a-8f10-5c7d2e9b0a44.jpg
+                  thumbnail_width: 600
+                  thumbnail_height: 400
+                  caption: 朝の駅
+                  created_at: "2026-10-26T05:30:12.345Z"
+                  like_count: 3
+                  liked_by_me: false
+                  author:
+                    username: alice
+                    display_name: Alice
+                    icon_url: null
+              next_cursor: null
+  "400":
+    $ref: ../components/responses/InvalidPagingParams.yaml
+  "404":
+    $ref: ../components/responses/UserNotFound.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

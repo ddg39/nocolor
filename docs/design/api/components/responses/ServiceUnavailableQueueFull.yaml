@@ -1,0 +1,24 @@
+description: |
+  503 `SERVICE_UNAVAILABLE`。メール送信キュー（README 1.11）が満杯。アドレスの状態と無関係に発生する。
+  `Retry-After` を付けてよい（秒数は固定の案: 30）。
+  API-03 では、これに加えて、登録の競合（1062）でやり直したあともユーザー名・メールアドレスのどちらも 0 行のままの場合にも返す
+  （API-03 の処理順 5）。
+headers:
+  Retry-After:
+    description: 再試行できるまでの秒数（任意）。
+    required: false
+    schema:
+      type: integer
+      minimum: 1
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      queueFull:
+        value:
+          error:
+            code: SERVICE_UNAVAILABLE
+            message: 現在処理できません。しばらくしてからお試しください。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

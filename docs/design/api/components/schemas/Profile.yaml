@@ -1,0 +1,37 @@
+type: object
+title: Profile
+description: |
+  プロフィール。UserSummary の項目に、投稿数・フォロー数・フォロワー数を加えたもの。
+  「出どころ」は db.md のテーブル・カラム。
+
+  - 「このユーザーが閲覧者をフォローしているか」（逆向きの関係）は、画面で使わず要件にもないので、MVP では返さない（設計判断 D-24）。
+  - 仮登録のまま（`email_verified_at` が `NULL`）のユーザーは、どの API でも「存在しない」として扱う（404 `USER_NOT_FOUND`、一覧にも出さない）。
+allOf:
+  - $ref: ./UserSummary.yaml
+  - type: object
+    required:
+      - post_count
+      - following_count
+      - follower_count
+    properties:
+      post_count:
+        type: integer
+        minimum: 0
+        description: 投稿数。出どころ `COUNT(*) FROM posts`。
+      following_count:
+        type: integer
+        minimum: 0
+        description: フォロー数。出どころ `COUNT(*) FROM follows WHERE follower_id`。
+      follower_count:
+        type: integer
+        minimum: 0
+        description: フォロワー数。出どころ `COUNT(*) FROM follows WHERE followee_id`。
+examples:
+  - username: alice
+    display_name: Alice
+    bio: 朝の光を撮っています。
+    icon_url: /images/avatars/9b2e7c40-1d3a-4f5b-8c6d-2a1e0f9b7d33.jpg
+    post_count: 12
+    following_count: 34
+    follower_count: 56
+    is_following: true

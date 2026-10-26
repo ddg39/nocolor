@@ -1,0 +1,51 @@
+operationId: unlikePost
+summary: API-17 いいねを取り消す
+x-api-id: API-17
+tags:
+  - Posts
+description: |
+  `DELETE /api/posts/{post_id}/like`（R-17）
+
+  ## 概要
+
+  いいねを取り消す（LIK-02）。**冪等**で、いいねしていなくても成功する。
+
+  - 関連要件 ID: LIK-02, LIK-03
+  - 利用画面: SCR-01, SCR-09
+  - ログイン: 必須。`X-CSRF-Token` が必要（Origin の検査も行う。README 1.4）。
+
+  ## 備考
+
+  - 使用テーブル: `likes`、`posts`。
+  - `DELETE FROM likes WHERE post_id = ? AND user_id = ?`。影響行数が 0 でも成功とする。
+    投稿の存在は別に確認する（存在しなければ 404）。
+  - パス `post_id` の形式が不正なときは DB を引かずに 404 `POST_NOT_FOUND`（README 1.1）。
+  - 共通エラー: 401 `UNAUTHENTICATED`、403 `CSRF_INVALID`、500 `INTERNAL_ERROR`、503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security:
+  - sessionCookie: []
+    csrfToken: []
+parameters:
+  - $ref: ../components/parameters/post_id.yaml
+responses:
+  "200":
+    description: 取り消し後の状態。`liked` は常に `false`。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/LikeState.yaml
+        examples:
+          unliked:
+            value:
+              liked: false
+              like_count: 12
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "404":
+    $ref: ../components/responses/PostNotFound.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

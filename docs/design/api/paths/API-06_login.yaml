@@ -1,0 +1,156 @@
+operationId: login
+summary: API-06 ログイン
+x-api-id: API-06
+tags:
+  - Auth
+description: |
+  `POST /api/auth/login`（R-06）
+
+  ## 概要
+
+  ユーザー名またはメールアドレスとパスワードでログインし、セッションを開始する（ACC-06）。
+  **本登録前のアカウントはログインできず**、確認メールの再送を案内する（ACC-04）。
+
+  - 関連要件 ID: ACC-04, ACC-06, 6.2
+  - 利用画面: SCR-05
+  - ログイン: 不要。CSRF は Origin の検査のみ（README 1.4 (1)）。リクエストは `Content-Type: application/json` が必須。
+  - レート制限: `login_ip` / `login_account`（README 1.8）。`login_account` は入力の検証（400）を通ったリクエストだけを数える（README 1.5 の 8）。
+
+  ## エラー
+
+  - `identifier` / `password` のどちらかが空のときは 400 `VALIDATION_ERROR`（`fields` に `REQUIRED`）。
+  - **ACC-04 の応答**: パスワードの検証に成功した後でだけ `email_verified_at` を調べる（db.md 4.5 の末尾）。
+    パスワードが違う場合は、確認状態にかかわらず 401 `INVALID_CREDENTIALS` を返す。
+    これにより、パスワードを知らない第三者は「このアカウントは仮登録中」という情報を得られない。
+    403 `EMAIL_NOT_VERIFIED` の応答にメールアドレスを含めない（画面は入力された識別子から再送フォームに補う。screens SCR-05）。
+  - 失敗の応答では `Set-Cookie` を返さない。
+
+  ## 備考
+
+  - 使用テーブル: `users`、`sessions`、`rate_limits`。
+  - **列挙対策**: ユーザーが存在しないときも、ダミーのハッシュに対して bcrypt の照合を行い、処理時間を揃える。
+    `INVALID_CREDENTIALS` のメッセージも共通にする。bcrypt の 72 バイト制限は実装が事前ハッシュで吸収する（設計判断 D-15）。
+  - 副作用: 成功時に `sessions` へ行を追加し（有効期限 30 日）、`Set-Cookie` を返す。
+    リクエストに有効な別のセッションの Cookie が付いていた場合は、そのセッションを削除してから新しいものを発行する
+    （既存の値は再利用しない）。同じユーザーの他のセッション（他の端末）は残す。
+  - セッションの有効期限は**ログインからの固定の 30 日**で、アクセスしても延長しない（スライディングしない。設計判断 D-26）。
+    `sessions.expires_at` と Cookie の `Max-Age` は、ともにログイン時刻から 30 日にする。
+  - 共通エラー: 403 `CSRF_INVALID`（Origin の検査）、413、415、500、503。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security: []
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        required:
+          - identifier
+          - password
+        properties:
+          identifier:
+            type: string
+            minLength: 1
+            description: |
+              ユーザー名またはメールアドレス。前後の空白を除き小文字にする。`@` を含めばメールアドレス、
+              含まなければユーザー名として照合する（ユーザー名に `@` は使えない。db.md 4.5）。
+              形式は検査しない（規則を教えないため。screens SCR-05）。空は `REQUIRED`。
+          password:
+            type: string
+            format: password
+            minLength: 1
+            description: |
+              パスワード。空でないこと。文字数・文字種は検査しない。加工しない。空は `REQUIRED`。
+      examples:
+        login:
+          value:
+            identifier: alice
+            password: Passw0rdExample
+responses:
+  "200":
+    description: |
+      ログインした。新しいセッションを開始し、`Set-Cookie` で `nocolor_session` を返す。
+    headers:
+      Set-Cookie:
+        description: |
+          `nocolor_session={値}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`（HTTPS では `Secure` も）。
+          値は 32 バイトの乱数の Base64URL（43 文字）。ログインのたびに新しい値を発行する（README 1.3）。
+        required: true
+        schema:
+          type: string
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - user
+            - csrf_token
+          properties:
+            user:
+              $ref: ../components/schemas/UserBrief.yaml
+            csrf_token:
+              type: string
+              description: |
+                CSRF トークン（README 1.4）。`Base64URL(HMAC-SHA256(csrf_key, Cookie の値))` で、43 文字。
+                ログイン必須の変更系 API の `X-CSRF-Token` ヘッダーに付ける。
+        examples:
+          loggedIn:
+            value:
+              user:
+                username: alice
+                display_name: Alice
+                icon_url: null
+              csrf_token: q8Yx0m2kZp7Lw3Nf9RtV1sBc5HdGe6JaUoXiYb4MqKc
+  "400":
+    $ref: ../components/responses/ValidationError.yaml
+  "401":
+    description: |
+      401 `INVALID_CREDENTIALS`。ユーザーが存在しない、パスワードが違う、または期限切れ（7 日超）の仮登録。区別しない。
+      `Set-Cookie` は返さない。ログイン必須の API の 401 `UNAUTHENTICATED` とは別物で、画面は `code` で分岐する。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          invalidCredentials:
+            value:
+              error:
+                code: INVALID_CREDENTIALS
+                message: ユーザー名（メールアドレス）またはパスワードが違います。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+  "403":
+    description: |
+      403。次のいずれか。
+      - `CSRF_INVALID`: Origin の検査に失敗。
+      - `EMAIL_NOT_VERIFIED`: **パスワードが正しく**、かつ `email_verified_at` が `NULL`（ACC-04）。
+        画面は確認メールの再送（API-05）を案内する。応答にメールアドレスは含めない。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          emailNotVerified:
+            value:
+              error:
+                code: EMAIL_NOT_VERIFIED
+                message: メールアドレスの確認が完了していません。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+          csrfInvalid:
+            value:
+              error:
+                code: CSRF_INVALID
+                message: リクエストを確認できませんでした。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+  "413":
+    $ref: ../components/responses/RequestTooLarge.yaml
+  "415":
+    $ref: ../components/responses/UnsupportedMediaType.yaml
+  "429":
+    $ref: ../components/responses/RateLimited.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

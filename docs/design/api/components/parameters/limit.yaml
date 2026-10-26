@@ -1,0 +1,11 @@
+name: limit
+in: query
+required: false
+description: |
+  1 ページの件数（README 1.7）。1〜50、既定 20。範囲外や整数でない値は丸めず 400 `VALIDATION_ERROR`
+  （`fields.limit` = `INVALID_VALUE`）。画面は指定せず既定の 20 件を使う（6.3）。
+schema:
+  type: integer
+  minimum: 1
+  maximum: 50
+  default: 20

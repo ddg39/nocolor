@@ -2,8 +2,97 @@
 
 [要件定義書](../../requirements.md)、[ADR 001](../../adr/001_delivery-architecture.md)、[画面設計](../screens/README.md)、[DB 設計](../db.md) をもとにした REST API の設計である。実装（Echo のハンドラ、sqlc のクエリ）はこの文書にもとづいて別途作る。
 
+**API の仕様の正本は OpenAPI 3.1.0（[openapi.yaml](openapi.yaml)）である。** この README には、OpenAPI で表せないもの（処理の共通規則、CSRF・レート制限などの運用、カーソルの意味、環境変数、メール送信キュー、画面操作との対応、設計判断、未決事項）だけを残す。章・節の番号（1.1〜1.11、2〜6）は、画面設計・DB 設計から参照されているので維持する。内容が OpenAPI に移った節も、見出しを残して移動先を書く。
+
 - 画面設計の付録 A「API 担当への要求」R-01〜R-24 に 1 対 1 で対応させ、**API ID の番号を R 番号と同じにした**（API-07 は R-07）。
 - 画面設計・DB 設計への変更は、この文書では反映済みの前提として書く。
+
+## OpenAPI の書き方の規約
+
+OpenAPI を書く・直す担当者は、次の規約に従う。見本は [API-01](paths/API-01_get-me.yaml)（ログイン任意の参照系）、[API-03](paths/API-03_signup.yaml)（ログイン不要の変更系・JSON）、[API-13](paths/API-13_create-post.yaml)（ログイン必須の変更系・multipart）である。
+
+### ファイル構成
+
+```
+docs/design/api/
+├── openapi.yaml                # ルート（info・servers・tags・paths・components の列挙）
+├── redocly.yaml                # lint 設定（extends: recommended。ルールを緩める場合は理由をコメントで書く）
+├── README.md                   # OpenAPI で表せない共通規則・一覧・設計判断・未決事項
+├── paths/API-xx_<slug>.yaml    # 1 ファイル = 1 Operation Object
+└── components/
+    ├── schemas/<Name>.yaml     # 1 ファイル 1 スキーマ
+    ├── responses/<Name>.yaml   # 共通のエラー応答
+    └── parameters/<Name>.yaml  # 共通のパラメータ
+```
+
+- 1 API 1 ファイルとする。OpenAPI は同じパスの複数メソッドを 1 つの Path Item に書く必要があるため、ルートの `paths` で、メソッドごとに Operation を `$ref: ./paths/API-xx_<slug>.yaml` で参照する。
+- `components` の各要素（`schemas`・`responses`・`parameters`）は、ルートの `components` にファイルへの `$ref` で列挙する。バンドル時に名前付きの型として残るようにするためである。新しい共通部品を足したら、ルートの列挙にも足す。
+- `paths/` のファイルの slug は、旧 Markdown と同じ（例: `API-13_create-post.yaml`）。
+- コード生成は、`npx -y @redocly/cli@2 bundle docs/design/api/openapi.yaml --config docs/design/api/redocly.yaml -o <出力先>` で作った 1 ファイルを使って行う。lint は `npx -y @redocly/cli@2 lint docs/design/api/openapi.yaml --config docs/design/api/redocly.yaml`（リポジトリのルートで実行。`--config` を省くと `redocly.yaml` が読まれず、無効にしたルールの警告が出る）。
+
+### 書き方
+
+- `servers: [{url: /}]`。`paths` は `/api/...` から始まる完全なパスで書く（Echo のルートと一致させるため）。Echo の `:post_id` は `{post_id}` と書く。
+- 各 Operation には次を書く。
+  - `operationId`: lowerCamelCase（例: `createPost`）。
+  - `summary`: `API-13 投稿の作成` の形。`x-api-id: API-13` も付ける。
+  - `tags`: ルートの `tags`（Me・Config・Auth・Timelines・Posts・Users）から選ぶ。
+  - `description`: Markdown。概要、処理順、備考、関連要件 ID、利用画面 ID、使用する DB クエリ名を、旧 Markdown から落とさずに書く。
+  - `security`、`parameters`、`requestBody`、`responses`。
+  - `responses`: 成功例とエラーを網羅する。エラーはステータスごとに 1 つの応答とし、起こりうる `code` を description に列挙する。共通の応答で足りるものは `components/responses` を `$ref` し、API 固有の `code` を含むものはその場に書く。ただし 429（`RateLimited`）は常に `$ref` する（`Retry-After` ヘッダーを持つため）。500 は全 API に付ける。
+- 認証は `components.securitySchemes` の `sessionCookie`（apiKey、cookie、`nocolor_session`）と `csrfToken`（apiKey、header、`X-CSRF-Token`）を使う。
+
+  | API の種類 | `security` |
+  | --- | --- |
+  | ログイン必須の参照系 | `[{sessionCookie: []}]` |
+  | ログイン必須の変更系 | `[{sessionCookie: [], csrfToken: []}]` |
+  | ログイン任意 | `[{}, {sessionCookie: []}]` |
+  | ログイン不要 | `[]` |
+
+  Origin の検査（1.4 (1)）は `security` では表せないので、各 Operation の description と README で説明する。
+- OpenAPI 3.1 の書き方を使う。null を許す項目は `type: [string, "null"]`（`nullable` は使わない）。`examples` は Media Type の `examples`、または Schema の `examples`（配列）で書く。
+- 入力規則（文字数、文字種、形式、サイズ）は `minLength`・`maxLength`・`pattern`・`format`・`minimum` などで表す。表せない規則（コードポイントで数える、制御文字の禁止、前処理、項目別コードの判定順など）は `description` に書く。`format`・`minLength`・`maxLength` など前処理後の形を前提にする制約は、前処理（前後の空白の除去、小文字化、改行の正規化など）の前の値には付けない（上限は description に「前処理後に N 文字」と書く。`minLength: 1` は付けてよい）。
+- `pattern` は Go の `regexp`（RE2）と ECMA-262 の両方で使える書き方に限る（先読み・後読み・後方参照は使わない）。表せない規則（例: パスワードの「英字と数字を 1 文字以上ずつ含む」）は `pattern` に書かず、description に書く。
+- スキーマによる自動の要求検証（`OapiRequestValidator` など）は使わない。検証は 1.5・1.9 の順序と項目別コードで実装が行う。パラメータの束縛エラーは 1.6 の形式・コードに変換する（パスの形式不正は 404 `POST_NOT_FOUND` / `USER_NOT_FOUND`、`limit` の不正は 400 `VALIDATION_ERROR`（`fields.limit` = `INVALID_VALUE`）、型の不一致は 400 `BAD_REQUEST` など）。
+- パスパラメータの形式が不正なときは、400 ではなく 404（`POST_NOT_FOUND` / `USER_NOT_FOUND`）を返す（1.1）。スキーマの `pattern` は形式を示すためのもので、不一致の応答は 404 である。description に書いておく。
+- エラーコードは `components/schemas/ErrorCode.yaml` の `enum` にすべて列挙し、各値の意味を description に書く。項目別コードは `FieldErrorCode.yaml`。
+- 画像ファイルを受ける multipart の項目は `type: string` と `format: binary` で書き、`encoding` で許可する形式（`image/jpeg, image/png, image/webp`）を示す。
+- 日時は `type: string` と `format: date-time`。ID は `PostId`、ユーザー名は `Username` のスキーマを使う。画像 URL は `/images/` で始まる相対パス（`pattern: '^/images/'`）。
+
+### 共通部品
+
+| 種類 | 名前 | 用途 |
+| --- | --- | --- |
+| schemas | `Error` | エラー応答の本文（`{error: {code, message, fields, request_id}}`） |
+| schemas | `ErrorCode` | エラーコードの列挙と意味 |
+| schemas | `FieldErrorCode` | 項目別コード（`fields` の値）の列挙と意味 |
+| schemas | `PostId` | 投稿 ID（ULID） |
+| schemas | `Username` | ユーザー名 |
+| schemas | `UserBrief` | 投稿の `author`、API-01・06 の `user` |
+| schemas | `Post` | 投稿 |
+| schemas | `UserSummary` | フォロー／フォロワー一覧の項目 |
+| schemas | `Profile` | プロフィール（`UserSummary` ＋ 件数） |
+| schemas | `LikeState` | いいねの操作後の状態（API-16・17。`liked` と `like_count`） |
+| schemas | `FollowState` | フォローの操作後の状態（API-20・21。`following` と `follower_count`） |
+| schemas | `NextCursor` | `next_cursor`（`string \| null`） |
+| schemas | `PostPage` | 投稿の一覧の応答（`items: Post[]` ＋ `next_cursor`） |
+| schemas | `UserSummaryPage` | ユーザーの一覧の応答（`items: UserSummary[]` ＋ `next_cursor`） |
+| parameters | `cursor`・`limit` | 一覧のクエリ（1.7） |
+| parameters | `post_id`・`username` | パスパラメータ |
+| responses | `Unauthenticated` | 401 `UNAUTHENTICATED` |
+| responses | `CsrfInvalid` | 403 `CSRF_INVALID` |
+| responses | `RateLimited` | 429 `RATE_LIMITED`（`Retry-After` ヘッダー付き） |
+| responses | `ValidationError` | 400 `VALIDATION_ERROR` / `BAD_REQUEST` |
+| responses | `InvalidPagingParams` | 400 `INVALID_CURSOR` / `VALIDATION_ERROR`（`limit`）。一覧 API 用 |
+| responses | `PostNotFound`・`UserNotFound` | 404 `POST_NOT_FOUND` / `USER_NOT_FOUND` |
+| responses | `RequestTooLarge` | 413 `REQUEST_TOO_LARGE`（JSON ボディ） |
+| responses | `UnsupportedMediaType` | 415 `UNSUPPORTED_MEDIA_TYPE`（JSON を受ける API） |
+| responses | `InternalError` | 500 `INTERNAL_ERROR` |
+| responses | `ServiceUnavailable` | 503 `SERVICE_UNAVAILABLE`（API 固有の条件が無いもの） |
+| responses | `ServiceUnavailableQueueFull` | 503 `SERVICE_UNAVAILABLE`（メール送信キュー満杯。`Retry-After` 付き。API-03・05・08） |
+| responses | `TokenInvalid` | 400 `TOKEN_INVALID` / `BAD_REQUEST`（API-04・09。API-10 は `VALIDATION_ERROR` を含むので個別に定義） |
+| responses | `ImageTooLarge` | 413 `IMAGE_TOO_LARGE` / `REQUEST_TOO_LARGE`（API-13・24） |
+| responses | `UnsupportedImageType` | 415 `UNSUPPORTED_IMAGE_TYPE` / `UNSUPPORTED_MEDIA_TYPE`（API-13・24） |
 
 ## 1. 共通仕様
 
@@ -17,7 +106,7 @@
 | 文字コード | UTF-8。不正な UTF-8 を含む JSON は 400 `BAD_REQUEST` |
 | キーの命名 | JSON のキーは `snake_case`。クエリパラメータも同じ |
 | 省略と null | レスポンスのキーは省略しない。値が無いものは `null`（例: `icon_url`）。リクエストの未知のキーは無視する |
-| メソッド | `GET`（取得）、`POST`（作成・操作）、`PUT`（置換・冪等な設定）、`DELETE`。`PATCH` は使わない。定義のないメソッドは 405 `METHOD_NOT_ALLOWED`、定義のないパスは 404 `NOT_FOUND`（いずれも JSON のエラー形式） |
+| メソッド | `GET`（取得）、`POST`（作成・操作）、`PUT`（置換・冪等な設定）、`DELETE`。`PATCH` は使わない。定義のないメソッドは 405 `METHOD_NOT_ALLOWED`、定義のないパスは 404 `NOT_FOUND`（いずれも JSON のエラー形式。OpenAPI の各 Operation には載せない） |
 | キャッシュ | すべての `/api` の応答に `Cache-Control: no-store` を付ける（閲覧者ごとに内容が変わるため、およびトークンを含むため）。API-02 だけ `public, max-age=300` としてよい |
 | 応答ヘッダー | `X-Content-Type-Options: nosniff`、`X-Request-Id`（1.6） |
 | リクエストの `Content-Type` | JSON を受ける API に `application/json` 以外が来たら 415 `UNSUPPORTED_MEDIA_TYPE`。API-13・API-24 に `multipart/form-data` 以外が来たら同じく 415 |
@@ -26,9 +115,11 @@
 
 ### 1.2 ID・日時・画像 URL・文字列
 
+形式は OpenAPI のスキーマ（`PostId`・`Username`・`Post` など）にも書いてある。ここには全文を残す。
+
 | 項目 | 仕様 |
 | --- | --- |
-| 投稿 ID | ULID の 26 文字（Crockford Base32、大文字）。形式は `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`。応答は常に大文字。入力は小文字も受け付けて大文字に直す。DB は `BINARY(16)` で、変換は backend が行う（db.md D-1） |
+| 投稿 ID | ULID の 26 文字（Crockford Base32、大文字）。形式は `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`。応答は常に大文字。入力は小文字も受け付けて大文字に直す。DB は `BINARY(16)` で、変換は backend が行う（db.md D-1）。OpenAPI の `PostId` の `pattern` は、入力で受ける小文字も含めて書いてある |
 | ユーザーの識別 | `username`（`^[a-z0-9_]{3,20}$`）。DB の連番 ID は API・URL・カーソルの平文に出さない（db.md D-2） |
 | 日時 | RFC 3339 の UTC、ミリ秒付き、末尾 `Z`。例: `2026-10-26T05:30:12.345Z`。DB の `DATETIME(3)` の UTC をそのまま整形する |
 | 画像の URL | `/images/{オブジェクトキー}` の相対パス（ADR 001）。例: `/images/posts/3f1c2a9e-7b0d-4c8a-9d52-1e6f0a7b4c11.jpg`。ホスト名は含めない。拡張子は例であり、変換後の形式（要件 8 章・未決）で決まる。アイコンが未設定のときは `null` |
@@ -38,7 +129,7 @@
 
 ### 1.3 認証（セッション Cookie）
 
-要件 6.2 のとおり、セッション + Cookie で行う。
+要件 6.2 のとおり、セッション + Cookie で行う。OpenAPI では `components.securitySchemes.sessionCookie` に対応する。
 
 | 項目 | 仕様 |
 | --- | --- |
@@ -53,7 +144,7 @@
 
 ### 1.4 CSRF 対策
 
-画面設計 3.6.2 の「403 `CSRF_INVALID`」に対応する。次の二段で防ぐ。
+画面設計 3.6.2 の「403 `CSRF_INVALID`」に対応する。次の二段で防ぐ。OpenAPI では (2) が `components.securitySchemes.csrfToken` に対応し、(1) は `security` で表せないので各 Operation の description に書く。
 
 **(1) Origin の検査（状態を変更するすべてのリクエスト）**
 
@@ -95,89 +186,25 @@
 - ログイン不要の API は 3・4 を飛ばす。
 - 5 と 8 を分けるのは、アカウント・アドレス単位のキーがボディを解析して正規化した後でないと得られないためである。8 は 9 の DB 検索（パスワードの照合やアカウントの検索）より前に行い、制限中は存在の有無に関する情報を返さない。
 - **形式不正の入力の数え方**: 6・7 で弾かれたリクエストは、IP 単位・ユーザー単位のスコープ（5）では 1 回と数えるが、アカウント・アドレス単位のスコープ（8）では数えない（キーが得られない、または有効なアドレス・識別子でないため）。アドレス単位の枠は、形式が正しい入力だけを数える。
-- **例外（API-10）**: `token` の形式と有効性の確認（読み取りのみ。トークンは消費しない）を、7 のうち `password` の検証より**先に**行う。トークンが無効なら `password` が不正でも `TOKEN_INVALID` を返す（API-10 の備考）。
+- **例外（API-10）**: `token` の形式と有効性の確認（読み取りのみ。トークンは消費しない）を、7 のうち `password` の検証より**先に**行う。トークンが無効なら `password` が不正でも `TOKEN_INVALID` を返す（API-10 の処理順）。
 
 ### 1.6 エラー応答
 
-#### 形式
+エラー応答の形式、項目別コード、エラーコードの一覧は OpenAPI に移した。
 
-HTTP ステータスが 4xx・5xx のとき、本文は次の形式にする。
-
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "入力内容を確認してください。",
-    "fields": {
-      "username": "TOO_SHORT",
-      "password": "NEED_LETTER_AND_DIGIT"
-    },
-    "request_id": "7f3c9b1e2a4d4c0e9a51"
-  }
-}
-```
-
-| キー | 型 | 説明 |
-| --- | --- | --- |
-| `code` | string | エラーコード（下表）。画面はこの値で文言を決める |
-| `message` | string | 日本語の短い説明。ログや curl での確認用。**画面にそのまま出さない**（screens D-21）。内部情報（SQL、パス、スタックトレース）を含めない |
-| `fields` | object | 項目名 → 項目別コード（下の「項目別コード」）。`VALIDATION_ERROR`・`USERNAME_TAKEN` のときだけ値が入る。ほかは `{}`（キーは省略しない） |
-| `request_id` | string | リクエストごとの識別子。同じ値を応答ヘッダー `X-Request-Id` にも付け、サーバーのログに残す。画面の「エラー番号」に使う。リクエストヘッダー `X-Request-Id`（英数字とハイフンで 64 文字以内）があればそれを使い、無ければ生成する |
-
-`fields` のキーはリクエストの項目名（`email`、`username`、`password`、`display_name`、`bio`、`caption`、`image`、`icon`、`icon_action`、`limit`、`identifier`、`token` など）と同じにする。
-
-#### 項目別コード（`fields` の値）
-
-| コード | 意味 | 使う項目 |
-| --- | --- | --- |
-| `REQUIRED` | 未指定、または（前後の空白を除いて）空 | 必須の項目すべて |
-| `TOO_SHORT` | 最小文字数に満たない | `username`、`password` |
-| `TOO_LONG` | 最大文字数を超える | `email`、`username`、`password`、`display_name`、`bio`、`caption` |
-| `INVALID_FORMAT` | 形式が不正 | `email` |
-| `INVALID_CHARS` | 使えない文字を含む | `username`、`display_name`、`bio`、`caption` |
-| `NEED_LETTER_AND_DIGIT` | 英字と数字を 1 文字以上ずつ含まない | `password` |
-| `INVALID_VALUE` | 値が許される範囲・列挙にない | `limit`、`icon_action` |
-| `UNEXPECTED` | 指定してはいけない組み合わせ（例: `icon_action` が `keep` なのに `icon` がある） | `icon` |
-| `TAKEN` | 使用済み（409 のとき） | `username` |
-
-#### エラーコード一覧
-
-| コード | HTTP | 発生条件 | 主な API |
-| --- | --- | --- | --- |
-| `BAD_REQUEST` | 400 | JSON・multipart として解釈できない、型が違う、クエリの型が違う | 全般 |
-| `VALIDATION_ERROR` | 400 | 入力規則違反。`fields` に項目別コード | API-03、05、08、10、13、24 ほか |
-| `INVALID_CURSOR` | 400 | `cursor` が改ざん・破損・別の一覧のもの | API-11、12、19、22、23 |
-| `TOKEN_INVALID` | 400 | メール確認・再設定のトークンが不正、期限切れ、使用済み（区別しない） | API-04、09、10 |
-| `CANNOT_FOLLOW_SELF` | 400 | 自分自身をフォローしようとした（FOL-01） | API-20 |
-| `NOT_GRAYSCALE` | 400 | 画像が白黒でない（PST-05） | API-13、24 |
-| `INVALID_IMAGE` | 400 | 許可された形式に見えるが、壊れていて復号できない | API-13、24 |
-| `ANIMATED_IMAGE` | 400 | アニメーション PNG・WebP（PST-03） | API-13、24 |
-| `IMAGE_RESOLUTION_TOO_LARGE` | 400 | ヘッダーから読んだ寸法が、いずれかの辺で 65535px を超える、または総画素数が 1 億を超える（実装上の固定の安全弁。復号しない）。要件 8 章の「最大解像度」（未決）が決まったら、その上限を超えた場合にも同じコードを返す | API-13、24 |
-| `UNAUTHENTICATED` | 401 | ログインが必要（Cookie 無し・無効・期限切れ） | ログイン必須の API |
-| `INVALID_CREDENTIALS` | 401 | ユーザー名（メール）とパスワードの組が合わない。ユーザーの有無を区別しない | API-06 |
-| `CSRF_INVALID` | 403 | Origin の検査またはトークンの検査に失敗 | 変更系の API |
-| `EMAIL_NOT_VERIFIED` | 403 | パスワードが正しく、かつ本登録が完了していない（ACC-04） | API-06 |
-| `FORBIDDEN` | 403 | 他人の投稿の削除 | API-15 |
-| `NOT_FOUND` | 404 | 定義のないパス | 全般 |
-| `POST_NOT_FOUND` | 404 | 投稿が存在しない、削除済み、ID の形式が不正 | API-14〜17 |
-| `USER_NOT_FOUND` | 404 | ユーザーが存在しない、仮登録のまま、ユーザー名の形式が不正 | API-18〜23 |
-| `METHOD_NOT_ALLOWED` | 405 | 定義のないメソッド | 全般 |
-| `USERNAME_TAKEN` | 409 | ユーザー名が使用済み（仮登録中を含む。ユーザー名は公開情報のため告知する） | API-03 |
-| `ALREADY_VERIFIED` | 409 | すでに本登録が完了している確認リンクの再利用 | API-04 |
-| `IMAGE_TOO_LARGE` | 413 | 画像のファイルサイズが上限（`max_image_bytes`）超過（PST-02） | API-13、24 |
-| `REQUEST_TOO_LARGE` | 413 | JSON ボディが 16KiB 超過、または multipart の画像以外の部分が大きすぎる | 全般 |
-| `UNSUPPORTED_MEDIA_TYPE` | 415 | リクエストの `Content-Type` が想定外 | 全般 |
-| `UNSUPPORTED_IMAGE_TYPE` | 415 | 中身を調べた結果が JPEG・PNG・WebP のいずれでもない（拡張子・申告された型は見ない。6.2） | API-13、24 |
-| `RATE_LIMITED` | 429 | 試行回数の制限（1.8）。`Retry-After` ヘッダー付き | 1.8 の対象 |
-| `INTERNAL_ERROR` | 500 | 想定外の障害 | 全般 |
-| `SERVICE_UNAVAILABLE` | 503 | (1) メール送信キュー（1.11）が満杯で積めない。API-03 では、登録の競合でやり直してもなお解消しない場合も含む（API-03 の処理順 5）。(2) MinIO に保存できない | (1) API-03、05、08。(2) API-13、24 |
+| 内容 | 移動先 |
+| --- | --- |
+| 形式（`error.code`・`message`・`fields`・`request_id`、`X-Request-Id` ヘッダー） | [components/schemas/Error.yaml](components/schemas/Error.yaml) |
+| 項目別コード（`fields` の値） | [components/schemas/FieldErrorCode.yaml](components/schemas/FieldErrorCode.yaml) |
+| エラーコード一覧（HTTP ステータス・発生条件・主な API） | [components/schemas/ErrorCode.yaml](components/schemas/ErrorCode.yaml) |
+| 共通のエラー応答 | [components/responses/](components/responses/) |
 
 - 403 は `CSRF_INVALID`・`EMAIL_NOT_VERIFIED`・`FORBIDDEN` の 3 種類があるので、画面は HTTP ステータスではなく `code` で分岐する。
 - 401 も同様に `UNAUTHENTICATED`（セッション切れ）と `INVALID_CREDENTIALS`（ログイン失敗）を `code` で分ける。
 
 #### 各 API の「共通エラー」
 
-各エンドポイントの「エラー」の表には固有のものだけを書き、次を共通として省略する。
+旧 Markdown の各 API は、次の略称で共通のエラーを省略していた。OpenAPI の各 Operation は、該当するエラーを `responses` に明記する（定義のないパス・メソッドに対する 404・405 を除く。これらは個別の Operation には載せず、1.1 の規則とする）。
 
 | 略称 | 内容 |
 | --- | --- |
@@ -191,22 +218,8 @@ HTTP ステータスが 4xx・5xx のとき、本文は次の形式にする。
 
 TML-05 の「読み込み中に新しい投稿が増えても重複・欠落しない」を満たすため、`OFFSET` を使わないカーソル方式にする。対象: API-11、12、19（投稿）、API-22、23（ユーザー）。
 
-#### リクエスト
-
-| パラメータ | 型 | 必須 | 既定 | 説明 |
-| --- | --- | --- | --- | --- |
-| `cursor` | string | 任意 | なし（先頭ページ） | 直前の応答の `next_cursor` をそのまま渡す。空文字は未指定と同じ |
-| `limit` | integer | 任意 | 20 | 1 ページの件数。1〜50。範囲外や整数でない値は 400 `VALIDATION_ERROR`（`fields.limit` = `INVALID_VALUE`）。画面は指定せず既定の 20 件を使う（6.3） |
-
-#### レスポンス（全一覧共通）
-
-```json
-{
-  "items": [ /* 投稿オブジェクトまたはユーザー要約。0 件以上、limit 件以下 */ ],
-  "next_cursor": "string または null"
-}
-```
-
+- リクエストのパラメータ（`cursor`・`limit`）は [components/parameters/cursor.yaml](components/parameters/cursor.yaml)・[limit.yaml](components/parameters/limit.yaml)。`limit` は 1〜50、既定 20、範囲外や整数でない値は 400 `VALIDATION_ERROR`（`fields.limit` = `INVALID_VALUE`）。画面は指定せず既定の 20 件を使う（6.3）。
+- レスポンスの共通形（`items` と `next_cursor`）は [PostPage.yaml](components/schemas/PostPage.yaml)・[UserSummaryPage.yaml](components/schemas/UserSummaryPage.yaml)・[NextCursor.yaml](components/schemas/NextCursor.yaml)。
 - **終端**: 次のページが無いときは `next_cursor` が `null`。0 件のときは `items: []` かつ `next_cursor: null`。
 - 次のページの有無は、`limit + 1` 件を取得して判定する（db.md 4.1）。`limit` 件ちょうどで終わる場合も、余りの 1 件が無ければ `null` になる（空のページを 1 回余計に返さない）。`next_cursor` は返した最後の項目から作る。
 
@@ -232,7 +245,7 @@ TML-05 の「読み込み中に新しい投稿が増えても重複・欠落し�
 
 ### 1.8 レート制限（要件 6.2）
 
-「ログインと各種メール送信には試行回数の制限を設ける」を実現する。ストアは MySQL の `rate_limits`（db.md 3.8・D-4）で、固定ウィンドウ方式である。
+「ログインと各種メール送信には試行回数の制限を設ける」を実現する。ストアは MySQL の `rate_limits`（db.md 3.8・D-4）で、固定ウィンドウ方式である。超過時の応答（429 `RATE_LIMITED`、`Retry-After`）は [components/responses/RateLimited.yaml](components/responses/RateLimited.yaml)。
 
 | スコープ | 数える対象（キー） | 上限 | ウィンドウ | 適用する API |
 | --- | --- | --- | --- | --- |
@@ -256,7 +269,7 @@ TML-05 の「読み込み中に新しい投稿が増えても重複・欠落し�
 
 ### 1.9 入力検証の共通規則
 
-要件定義書 4 章の入力規則と一致させる。文字数はコードポイントで数える。
+要件定義書 4 章の入力規則と一致させる。文字数はコードポイントで数える。文字数・文字種・形式は OpenAPI のスキーマ（`minLength`・`maxLength`・`pattern`）にも書いてあるが、前処理と項目別コードの判定順は表せないので、ここに全文を残す。
 
 | 項目 | 規則 | 前処理 | 項目別コード |
 | --- | --- | --- | --- |
@@ -306,116 +319,80 @@ API-03・05・08 の「応答後の非同期処理」の実体を次のとおり
 
 ## 2. エンドポイント一覧
 
-パスは Echo のルート定義の書式（`:名前` がパスパラメータ）で書く。`:post_id` は投稿 ID（1.2）、`:username` はユーザー名である。「ログイン」の列は、「要」がログイン必須（未ログインは 401）、「任意」がログインしていれば閲覧者の状態（`liked_by_me` など）を付ける、「不要」がログインと無関係を表す。「R」の列は screens/README.md 付録 A の要求 ID である。
+パスは Echo のルート定義の書式ではなく、OpenAPI の書式（`{名前}` がパスパラメータ）で書く。Echo のルートに書くときは `:post_id` のようにする。`post_id` は投稿 ID（1.2）、`username` はユーザー名である。「ログイン」の列は、「要」がログイン必須（未ログインは 401）、「任意」がログインしていれば閲覧者の状態（`liked_by_me` など）を付ける、「不要」がログインと無関係を表す。「R」の列は screens/README.md 付録 A の要求 ID である。API ID のリンク先は、その API の OpenAPI 定義（Operation Object）である。
 
 | API ID | R | メソッド | パス | ログイン | 関連要件 ID | 利用画面 |
 | --- | --- | --- | --- | --- | --- | --- |
-| [API-01](API-01_get-me.md) | R-01 | GET | `/api/me` | 任意 | 3 章, 6.2 | 全画面（ヘッダー・ガード）。SCR-02, 05, 06 のログイン済み判定 |
-| [API-02](API-02_get-config.md) | R-02 | GET | `/api/config` | 不要 | PST-02, PRF-04, 6.1 | SCR-08, SCR-12 |
-| [API-03](API-03_signup.md) | R-03 | POST | `/api/auth/signup` | 不要 | ACC-01, ACC-02, ACC-05, 6.2 | SCR-02 |
-| [API-04](API-04_verify-email.md) | R-04 | POST | `/api/auth/verify` | 不要 | ACC-02, ACC-03 | SCR-04 |
-| [API-05](API-05_resend-verification.md) | R-05 | POST | `/api/auth/verify/resend` | 不要 | ACC-03, ACC-04, 6.2 | SCR-03, SCR-04, SCR-05 |
-| [API-06](API-06_login.md) | R-06 | POST | `/api/auth/login` | 不要 | ACC-04, ACC-06, 6.2 | SCR-05 |
-| [API-07](API-07_logout.md) | R-07 | POST | `/api/auth/logout` | 要 | ACC-07, 6.2 | 全画面（ヘッダーのメニュー）。主に SCR-01 |
-| [API-08](API-08_forgot-password.md) | R-08 | POST | `/api/auth/password/forgot` | 不要 | ACC-08, ACC-09, 6.2 | SCR-06 |
-| [API-09](API-09_check-reset-token.md) | R-09 | POST | `/api/auth/password/reset/check` | 不要 | ACC-08, ACC-09 | SCR-07 |
-| [API-10](API-10_reset-password.md) | R-10 | POST | `/api/auth/password/reset` | 不要 | ACC-08, 6.2 | SCR-07 |
-| [API-11](API-11_global-timeline.md) | R-11 | GET | `/api/timelines/global` | 任意 | TML-01, TML-02, TML-04, TML-05, TML-06, LIK-03 | SCR-01 |
-| [API-12](API-12_following-timeline.md) | R-12 | GET | `/api/timelines/following` | 要 | TML-01, TML-03, TML-05, TML-06, LIK-03 | SCR-01 |
-| [API-13](API-13_create-post.md) | R-13 | POST | `/api/posts` | 要 | PST-01〜PST-05, PST-08, TML-06, 6.2, 6.3 | SCR-08 |
-| [API-14](API-14_get-post.md) | R-14 | GET | `/api/posts/:post_id` | 任意 | PST-07, LIK-03, TML-06 | SCR-09 |
-| [API-15](API-15_delete-post.md) | R-15 | DELETE | `/api/posts/:post_id` | 要 | PST-06 | SCR-09 |
-| [API-16](API-16_like-post.md) | R-16 | PUT | `/api/posts/:post_id/like` | 要 | LIK-01, LIK-03 | SCR-01, SCR-09 |
-| [API-17](API-17_unlike-post.md) | R-17 | DELETE | `/api/posts/:post_id/like` | 要 | LIK-02, LIK-03 | SCR-01, SCR-09 |
-| [API-18](API-18_get-profile.md) | R-18 | GET | `/api/users/:username` | 任意 | PRF-01, PRF-02, FOL-01 | SCR-10, SCR-11, SCR-12 |
-| [API-19](API-19_list-user-posts.md) | R-19 | GET | `/api/users/:username/posts` | 任意 | PRF-02, TML-05, TML-06, LIK-03 | SCR-10 |
-| [API-20](API-20_follow-user.md) | R-20 | PUT | `/api/users/:username/follow` | 要 | FOL-01, FOL-03 | SCR-10, SCR-11 |
-| [API-21](API-21_unfollow-user.md) | R-21 | DELETE | `/api/users/:username/follow` | 要 | FOL-02 | SCR-10, SCR-11 |
-| [API-22](API-22_list-following.md) | R-22 | GET | `/api/users/:username/following` | 任意 | PRF-05, TML-05 | SCR-11 |
-| [API-23](API-23_list-followers.md) | R-23 | GET | `/api/users/:username/followers` | 任意 | PRF-05, TML-05 | SCR-11 |
-| [API-24](API-24_update-profile.md) | R-24 | PUT | `/api/me/profile` | 要 | PRF-03, PRF-04, PST-02〜PST-05, PST-08 | SCR-12 |
+| [API-01](paths/API-01_get-me.yaml) | R-01 | GET | `/api/me` | 任意 | 3 章, 6.2 | 全画面（ヘッダー・ガード）。SCR-02, 05, 06 のログイン済み判定 |
+| [API-02](paths/API-02_get-config.yaml) | R-02 | GET | `/api/config` | 不要 | PST-02, PRF-04, 6.1 | SCR-08, SCR-12 |
+| [API-03](paths/API-03_signup.yaml) | R-03 | POST | `/api/auth/signup` | 不要 | ACC-01, ACC-02, ACC-05, 6.2 | SCR-02 |
+| [API-04](paths/API-04_verify-email.yaml) | R-04 | POST | `/api/auth/verify` | 不要 | ACC-02, ACC-03 | SCR-04 |
+| [API-05](paths/API-05_resend-verification.yaml) | R-05 | POST | `/api/auth/verify/resend` | 不要 | ACC-03, ACC-04, 6.2 | SCR-03, SCR-04, SCR-05 |
+| [API-06](paths/API-06_login.yaml) | R-06 | POST | `/api/auth/login` | 不要 | ACC-04, ACC-06, 6.2 | SCR-05 |
+| [API-07](paths/API-07_logout.yaml) | R-07 | POST | `/api/auth/logout` | 要 | ACC-07, 6.2 | 全画面（ヘッダーのメニュー）。主に SCR-01 |
+| [API-08](paths/API-08_forgot-password.yaml) | R-08 | POST | `/api/auth/password/forgot` | 不要 | ACC-08, ACC-09, 6.2 | SCR-06 |
+| [API-09](paths/API-09_check-reset-token.yaml) | R-09 | POST | `/api/auth/password/reset/check` | 不要 | ACC-08, ACC-09 | SCR-07 |
+| [API-10](paths/API-10_reset-password.yaml) | R-10 | POST | `/api/auth/password/reset` | 不要 | ACC-08, 6.2 | SCR-07 |
+| [API-11](paths/API-11_global-timeline.yaml) | R-11 | GET | `/api/timelines/global` | 任意 | TML-01, TML-02, TML-04, TML-05, TML-06, LIK-03 | SCR-01 |
+| [API-12](paths/API-12_following-timeline.yaml) | R-12 | GET | `/api/timelines/following` | 要 | TML-01, TML-03, TML-05, TML-06, LIK-03 | SCR-01 |
+| [API-13](paths/API-13_create-post.yaml) | R-13 | POST | `/api/posts` | 要 | PST-01〜PST-05, PST-08, TML-06, 6.2, 6.3 | SCR-08 |
+| [API-14](paths/API-14_get-post.yaml) | R-14 | GET | `/api/posts/{post_id}` | 任意 | PST-07, LIK-03, TML-06 | SCR-09 |
+| [API-15](paths/API-15_delete-post.yaml) | R-15 | DELETE | `/api/posts/{post_id}` | 要 | PST-06 | SCR-09 |
+| [API-16](paths/API-16_like-post.yaml) | R-16 | PUT | `/api/posts/{post_id}/like` | 要 | LIK-01, LIK-03 | SCR-01, SCR-09 |
+| [API-17](paths/API-17_unlike-post.yaml) | R-17 | DELETE | `/api/posts/{post_id}/like` | 要 | LIK-02, LIK-03 | SCR-01, SCR-09 |
+| [API-18](paths/API-18_get-profile.yaml) | R-18 | GET | `/api/users/{username}` | 任意 | PRF-01, PRF-02, FOL-01 | SCR-10, SCR-11, SCR-12 |
+| [API-19](paths/API-19_list-user-posts.yaml) | R-19 | GET | `/api/users/{username}/posts` | 任意 | PRF-02, TML-05, TML-06, LIK-03 | SCR-10 |
+| [API-20](paths/API-20_follow-user.yaml) | R-20 | PUT | `/api/users/{username}/follow` | 要 | FOL-01, FOL-03 | SCR-10, SCR-11 |
+| [API-21](paths/API-21_unfollow-user.yaml) | R-21 | DELETE | `/api/users/{username}/follow` | 要 | FOL-02 | SCR-10, SCR-11 |
+| [API-22](paths/API-22_list-following.yaml) | R-22 | GET | `/api/users/{username}/following` | 任意 | PRF-05, TML-05 | SCR-11 |
+| [API-23](paths/API-23_list-followers.yaml) | R-23 | GET | `/api/users/{username}/followers` | 任意 | PRF-05, TML-05 | SCR-11 |
+| [API-24](paths/API-24_update-profile.yaml) | R-24 | PUT | `/api/me/profile` | 要 | PRF-03, PRF-04, PST-02〜PST-05, PST-08 | SCR-12 |
 
 - **仮の案からの変更は 1 点**: `/api/timeline/...` を `/api/timelines/...` に変えた（リソース名は複数形。設計判断 D-2）。R-02 の `GET /api/config`、R-01 の `/api/me` は単数のまま採用した（設定と本人は 1 つしかないため）。
 - ログイン状態によって内容が変わる「任意」の API は、Cookie が無効なら未ログインとして扱う（1.3）。
 
 ### 共通のオブジェクト
 
-応答に出るオブジェクトは次の 4 つで、すべての API で同じ形にする。「出どころ」は db.md のテーブル・カラムである（DB 設計に無い項目は返さない）。
+応答に出るオブジェクトの定義は OpenAPI のスキーマに移した（すべての API で同じ形にする）。各項目の「出どころ」（db.md のテーブル・カラム。DB 設計に無い項目は返さない）は、各プロパティの description に書いてある。
 
-#### UserBrief（投稿の `author`、API-01 の `user`、API-06 の `user`）
-
-| キー | 型 | 説明 | 出どころ |
-| --- | --- | --- | --- |
-| `username` | string | ユーザー名 | `users.username` |
-| `display_name` | string | 表示名 | `users.display_name` |
-| `icon_url` | string \| null | アイコンの URL。未設定は `null` | `users.avatar_key`（`/images/` + キー） |
-
-#### Post（投稿）
-
-| キー | 型 | 説明 | 出どころ |
-| --- | --- | --- | --- |
-| `id` | string | 投稿 ID（ULID） | `posts.id` |
-| `image_url` | string | 元画像の URL | `posts.image_key` |
-| `image_width` | integer | 元画像の幅（px） | `posts.image_width` |
-| `image_height` | integer | 元画像の高さ（px） | `posts.image_height` |
-| `thumbnail_url` | string | サムネイルの URL | `posts.thumbnail_key` |
-| `thumbnail_width` | integer | サムネイルの幅（px） | `posts.thumbnail_width` |
-| `thumbnail_height` | integer | サムネイルの高さ（px） | `posts.thumbnail_height` |
-| `caption` | string | キャプション。無ければ空文字 | `posts.caption` |
-| `created_at` | string | 投稿日時 | `posts.created_at` |
-| `like_count` | integer | いいね数 | `COUNT(*) FROM likes`（都度集計。db.md 4.3） |
-| `liked_by_me` | boolean | 閲覧者がいいね済みか。未ログインは `false`（LIK-03） | `EXISTS FROM likes` |
-| `author` | UserBrief | 投稿者 | `users` |
-
-#### UserSummary（フォロー／フォロワー一覧の項目）
-
-| キー | 型 | 説明 | 出どころ |
-| --- | --- | --- | --- |
-| `username` | string | ユーザー名 | `users.username` |
-| `display_name` | string | 表示名 | `users.display_name` |
-| `icon_url` | string \| null | アイコンの URL | `users.avatar_key` |
-| `bio` | string | 自己紹介 | `users.bio` |
-| `is_following` | boolean | 閲覧者がこのユーザーをフォロー中か。未ログイン、および閲覧者自身の行は `false`（FOL） | `EXISTS FROM follows` |
-
-#### Profile（プロフィール）
-
-UserSummary の項目に、次を加える。
-
-| キー | 型 | 説明 | 出どころ |
-| --- | --- | --- | --- |
-| `post_count` | integer | 投稿数 | `COUNT(*) FROM posts` |
-| `following_count` | integer | フォロー数 | `COUNT(*) FROM follows WHERE follower_id` |
-| `follower_count` | integer | フォロワー数 | `COUNT(*) FROM follows WHERE followee_id` |
+| オブジェクト | 用途 | 定義 |
+| --- | --- | --- |
+| UserBrief | 投稿の `author`、API-01 の `user`、API-06 の `user` | [components/schemas/UserBrief.yaml](components/schemas/UserBrief.yaml) |
+| Post | 投稿 | [components/schemas/Post.yaml](components/schemas/Post.yaml) |
+| UserSummary | フォロー／フォロワー一覧の項目 | [components/schemas/UserSummary.yaml](components/schemas/UserSummary.yaml) |
+| Profile | プロフィール（UserSummary に `post_count`・`following_count`・`follower_count` を加える） | [components/schemas/Profile.yaml](components/schemas/Profile.yaml) |
 
 - 「このユーザーが閲覧者をフォローしているか」（逆向きの関係）は、画面で使わず要件にもないので、MVP では返さない（設計判断 D-24）。
 - 仮登録のまま（`email_verified_at` が `NULL`）のユーザーは、どの API でも「存在しない」として扱う（404 `USER_NOT_FOUND`、一覧にも出さない）。
 
 ## 3. 各エンドポイントの詳細
 
-- [API-01 現在のユーザーの取得](API-01_get-me.md)
-- [API-02 設定値の取得](API-02_get-config.md)
-- [API-03 仮登録](API-03_signup.md)
-- [API-04 メールアドレスの確認](API-04_verify-email.md)
-- [API-05 確認メールの再送](API-05_resend-verification.md)
-- [API-06 ログイン](API-06_login.md)
-- [API-07 ログアウト](API-07_logout.md)
-- [API-08 パスワード再設定メールの申請](API-08_forgot-password.md)
-- [API-09 再設定リンクの確認](API-09_check-reset-token.md)
-- [API-10 パスワードの再設定](API-10_reset-password.md)
-- [API-11 全体タイムライン](API-11_global-timeline.md)
-- [API-12 フォロー中タイムライン](API-12_following-timeline.md)
-- [API-13 投稿の作成](API-13_create-post.md)
-- [API-14 投稿の取得](API-14_get-post.md)
-- [API-15 投稿の削除](API-15_delete-post.md)
-- [API-16 いいねを付ける](API-16_like-post.md)
-- [API-17 いいねを取り消す](API-17_unlike-post.md)
-- [API-18 プロフィールの取得](API-18_get-profile.md)
-- [API-19 ユーザーの投稿一覧](API-19_list-user-posts.md)
-- [API-20 フォローする](API-20_follow-user.md)
-- [API-21 フォローを解除する](API-21_unfollow-user.md)
-- [API-22 フォロー一覧](API-22_list-following.md)
-- [API-23 フォロワー一覧](API-23_list-followers.md)
-- [API-24 プロフィールの更新](API-24_update-profile.md)
+各 API の詳細（概要、リクエスト、レスポンス、エラー、備考）は OpenAPI の Operation に書いてある。リンク先のファイルを参照する。
+
+- [API-01 現在のユーザーの取得](paths/API-01_get-me.yaml)
+- [API-02 設定値の取得](paths/API-02_get-config.yaml)
+- [API-03 仮登録](paths/API-03_signup.yaml)
+- [API-04 メールアドレスの確認](paths/API-04_verify-email.yaml)
+- [API-05 確認メールの再送](paths/API-05_resend-verification.yaml)
+- [API-06 ログイン](paths/API-06_login.yaml)
+- [API-07 ログアウト](paths/API-07_logout.yaml)
+- [API-08 パスワード再設定メールの申請](paths/API-08_forgot-password.yaml)
+- [API-09 再設定リンクの確認](paths/API-09_check-reset-token.yaml)
+- [API-10 パスワードの再設定](paths/API-10_reset-password.yaml)
+- [API-11 全体タイムライン](paths/API-11_global-timeline.yaml)
+- [API-12 フォロー中タイムライン](paths/API-12_following-timeline.yaml)
+- [API-13 投稿の作成](paths/API-13_create-post.yaml)
+- [API-14 投稿の取得](paths/API-14_get-post.yaml)
+- [API-15 投稿の削除](paths/API-15_delete-post.yaml)
+- [API-16 いいねを付ける](paths/API-16_like-post.yaml)
+- [API-17 いいねを取り消す](paths/API-17_unlike-post.yaml)
+- [API-18 プロフィールの取得](paths/API-18_get-profile.yaml)
+- [API-19 ユーザーの投稿一覧](paths/API-19_list-user-posts.yaml)
+- [API-20 フォローする](paths/API-20_follow-user.yaml)
+- [API-21 フォローを解除する](paths/API-21_unfollow-user.yaml)
+- [API-22 フォロー一覧](paths/API-22_list-following.yaml)
+- [API-23 フォロワー一覧](paths/API-23_list-followers.yaml)
+- [API-24 プロフィールの更新](paths/API-24_update-profile.yaml)
 
 ## 4. 画面操作との対応の確認
 
@@ -485,6 +462,7 @@ screens/README.md の画面×操作（付録 A.3）を、すべて API に対応
 | D-28 | 画像の解像度に、要件 8 章の未決とは別の固定の安全弁を置く（各辺 65535px 以下、総画素数 1 億以下。ヘッダーで判定し、超えたら復号せず 400） | ファイルサイズが 10MB 以下でも、圧縮率の高い PNG などは数億画素に展開でき、メモリを使い切られる（DoS）。65535px は DB の `SMALLINT UNSIGNED` の範囲とも一致する。要件 8 章で最大解像度が決まれば、より厳しい側が効く。別案: 上限が決まるまで無制限にする（DoS の危険がある） |
 | D-29 | `Origin` は `APP_BASE_URL` との完全一致で検査し、`Host` とは比べない | リバースプロキシ・TLS 終端でホスト、ポート、スキームが変わりうるため。スキームも比べる（http と https の混在を許さない）。1.4 参照。欠点: 開発・本番ごとに `APP_BASE_URL` を正しく設定する必要がある（メール内のリンクで元から必要） |
 | D-30 | 作成から 7 日を超えた仮登録は、削除ジョブの実行前でも「存在しない」と扱う（参照時の条件で判定する） | API-06 は `INVALID_CREDENTIALS`、API-05 は再送しない、API-18〜23 は 404、API-03 は再登録を許す。db.md 5 章の方針と同じ。削除ジョブの実行間隔に挙動が左右されない |
+| D-31 | API 設計書を OpenAPI 3.1.0 で書く。1 API 1 ファイルとし、ルートの `paths` でメソッドごとに `$ref` する。コード生成は bundle したファイルで行う | OpenAPI で表せる仕様（項目・型・入力規則・応答・エラー）を機械可読にして、Markdown との食い違いを防ぎ、コード生成・lint に使えるようにするため。同じパスの複数メソッドは 1 つの Path Item に書く必要があるので、Operation 単位で分割して `$ref` する。表せない共通規則・運用・設計判断・未決事項はこの README に残す。別案: 1 つの巨大な YAML にする。レビューの差分が見づらくなる |
 
 ## 6. 未決事項
 
@@ -498,5 +476,6 @@ screens/README.md の画面×操作（付録 A.3）を、すべて API に対応
 | Q-4 | **白黒判定の許容値の既定値**（要件 8 章） | API には影響しない（`NOT_GRAYSCALE` の判定のみ。環境変数 `GRAYSCALE_TOLERANCE`） | JPEG の実画像で検証して決める |
 | Q-5 | 投稿の二重送信を防ぐ `Idempotency-Key` の要否 | API-13 のヘッダー追加 | MVP では設けない（D-14）。実運用で二重投稿が問題になったら追加する |
 | Q-6 | 試行制限の具体値（1.8） | 429 になる条件 | 1.8 の値で確定してよいか。メールは 1 時間 3 回だと、届かずに再送を繰り返す利用者が止まりうる。画面側は 60 秒の待機（screens SCR-03）があるので、ほとんど到達しない。新規登録の重複メール（D-25）も同じ枠で数える |
+| Q-7 | **コード生成器（oapi-codegen の版）の選定と、3.1 の書き方で型が素直に生成されるかの確認**。対象は `type: [T, "null"]`、API-01 の `user` の `oneOf [UserBrief, null]`、Schema の `examples` | 生成される型。API の項目・仕様は変わらない | 実装の最初に、bundle 後のファイルで oapi-codegen v2 の最新版を実行して確認する。`oneOf` が union 型になるなど素直でなければ、null を許す `$ref` の書き方を規約で決め直す |
 
 確定済みの旧 Q-5（確認トークンを残す）は D-8、旧 Q-8（メール重複の告知）は D-25、旧 Q-9（7 日超の仮登録の扱い）は D-30、旧 Q-2 のうち安全弁の部分は D-28 に移した。

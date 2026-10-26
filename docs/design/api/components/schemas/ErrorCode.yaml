@@ -1,0 +1,64 @@
+type: string
+title: ErrorCode
+description: |
+  エラーコード。画面は HTTP ステータスではなくこの値で分岐し、文言を決める。
+  403 は `CSRF_INVALID`・`EMAIL_NOT_VERIFIED`・`FORBIDDEN` の 3 種類、401 は `UNAUTHENTICATED`（セッション切れ）と
+  `INVALID_CREDENTIALS`（ログイン失敗）の 2 種類があるので、必ず `code` で分ける。
+
+  | コード | HTTP | 意味（発生条件） | 主な API |
+  | --- | --- | --- | --- |
+  | `BAD_REQUEST` | 400 | JSON・multipart として解釈できない、型が違う、クエリの型が違う | 全般 |
+  | `VALIDATION_ERROR` | 400 | 入力規則違反。`fields` に項目別コード | API-03、05、08、10、13、24 ほか |
+  | `INVALID_CURSOR` | 400 | `cursor` が改ざん・破損・別の一覧のもの | API-11、12、19、22、23 |
+  | `TOKEN_INVALID` | 400 | メール確認・再設定のトークンが不正、期限切れ、使用済み（区別しない） | API-04、09、10 |
+  | `CANNOT_FOLLOW_SELF` | 400 | 自分自身をフォローしようとした（FOL-01） | API-20 |
+  | `NOT_GRAYSCALE` | 400 | 画像が白黒でない（PST-05） | API-13、24 |
+  | `INVALID_IMAGE` | 400 | 許可された形式に見えるが、壊れていて復号できない | API-13、24 |
+  | `ANIMATED_IMAGE` | 400 | アニメーション PNG・WebP（PST-03） | API-13、24 |
+  | `IMAGE_RESOLUTION_TOO_LARGE` | 400 | ヘッダーから読んだ寸法が、いずれかの辺で 65535px を超える、または総画素数が 1 億を超える（実装上の固定の安全弁。復号しない）。要件 8 章の「最大解像度」（未決）が決まったら、その上限を超えた場合にも同じコードを返す | API-13、24 |
+  | `UNAUTHENTICATED` | 401 | ログインが必要（Cookie 無し・無効・期限切れ） | ログイン必須の API |
+  | `INVALID_CREDENTIALS` | 401 | ユーザー名（メール）とパスワードの組が合わない。ユーザーの有無を区別しない | API-06 |
+  | `CSRF_INVALID` | 403 | Origin の検査またはトークンの検査に失敗 | 変更系の API |
+  | `EMAIL_NOT_VERIFIED` | 403 | パスワードが正しく、かつ本登録が完了していない（ACC-04） | API-06 |
+  | `FORBIDDEN` | 403 | 他人の投稿の削除 | API-15 |
+  | `NOT_FOUND` | 404 | 定義のないパス | 全般（個別の API には載せない） |
+  | `POST_NOT_FOUND` | 404 | 投稿が存在しない、削除済み、ID の形式が不正 | API-14〜17 |
+  | `USER_NOT_FOUND` | 404 | ユーザーが存在しない、仮登録のまま、ユーザー名の形式が不正 | API-18〜23 |
+  | `METHOD_NOT_ALLOWED` | 405 | 定義のないメソッド | 全般（個別の API には載せない） |
+  | `USERNAME_TAKEN` | 409 | ユーザー名が使用済み（仮登録中を含む。ユーザー名は公開情報のため告知する） | API-03 |
+  | `ALREADY_VERIFIED` | 409 | すでに本登録が完了している確認リンクの再利用 | API-04 |
+  | `IMAGE_TOO_LARGE` | 413 | 画像のファイルサイズが上限（`max_image_bytes`）超過（PST-02） | API-13、24 |
+  | `REQUEST_TOO_LARGE` | 413 | JSON ボディが 16KiB 超過、または multipart の画像以外の部分が大きすぎる | 全般 |
+  | `UNSUPPORTED_MEDIA_TYPE` | 415 | リクエストの `Content-Type` が想定外 | 全般 |
+  | `UNSUPPORTED_IMAGE_TYPE` | 415 | 中身を調べた結果が JPEG・PNG・WebP のいずれでもない（拡張子・申告された型は見ない。6.2） | API-13、24 |
+  | `RATE_LIMITED` | 429 | 試行回数の制限（README 1.8）。`Retry-After` ヘッダー付き | 1.8 の対象 |
+  | `INTERNAL_ERROR` | 500 | 想定外の障害 | 全般 |
+  | `SERVICE_UNAVAILABLE` | 503 | (1) メール送信キュー（README 1.11）が満杯で積めない。API-03 では、登録の競合でやり直してもなお解消しない場合も含む（API-03 の処理順 5）。(2) MinIO に保存できない、または画像の復号・変換のメモリ待ちが上限を超えた。(3) その他、一時的に処理できない（DB の障害など）。`Retry-After` ヘッダーを付けうる（任意。キュー満杯では固定の案として 30 秒） | (1) API-03、05、08。(2) API-13、24。(3) 全般 |
+enum:
+  - BAD_REQUEST
+  - VALIDATION_ERROR
+  - INVALID_CURSOR
+  - TOKEN_INVALID
+  - CANNOT_FOLLOW_SELF
+  - NOT_GRAYSCALE
+  - INVALID_IMAGE
+  - ANIMATED_IMAGE
+  - IMAGE_RESOLUTION_TOO_LARGE
+  - UNAUTHENTICATED
+  - INVALID_CREDENTIALS
+  - CSRF_INVALID
+  - EMAIL_NOT_VERIFIED
+  - FORBIDDEN
+  - NOT_FOUND
+  - POST_NOT_FOUND
+  - USER_NOT_FOUND
+  - METHOD_NOT_ALLOWED
+  - USERNAME_TAKEN
+  - ALREADY_VERIFIED
+  - IMAGE_TOO_LARGE
+  - REQUEST_TOO_LARGE
+  - UNSUPPORTED_MEDIA_TYPE
+  - UNSUPPORTED_IMAGE_TYPE
+  - RATE_LIMITED
+  - INTERNAL_ERROR
+  - SERVICE_UNAVAILABLE

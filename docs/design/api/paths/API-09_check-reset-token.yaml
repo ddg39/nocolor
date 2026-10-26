@@ -1,0 +1,79 @@
+operationId: checkResetToken
+summary: API-09 再設定リンクの確認
+x-api-id: API-09
+tags:
+  - Auth
+description: |
+  `POST /api/auth/password/reset/check`（R-09）
+
+  ## 概要
+
+  再設定リンクのトークンが有効かを確認する。**トークンを消費しない**（読み取りのみ）。
+  入力後に期限切れが分かるのを避ける（screens D-07）。
+
+  - 関連要件 ID: ACC-08, ACC-09
+  - 利用画面: SCR-07
+  - ログイン: 不要。CSRF は Origin の検査のみ（README 1.4 (1)）。リクエストは `Content-Type: application/json` が必須。
+  - レート制限: `token_ip`（README 1.8）。
+
+  トークンを URL ではなくボディで送るのは、URL がアクセスログやリファラに残るのを避けるためである
+  （読み取りだが POST にした）。
+
+  ## 備考
+
+  - 使用テーブル: `password_reset_tokens`、`users`、`rate_limits`。
+  - 副作用なし（`used_at` も更新しない）。
+  - 共通エラー: 403 `CSRF_INVALID`（Origin の検査）、413、415、500、503。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security: []
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        required:
+          - token
+        properties:
+          token:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{43}$'
+            description: |
+              再設定メールのリンクのトークン。43 文字の Base64URL。
+              形式違反は DB を引かず 400 `TOKEN_INVALID` を返す（`VALIDATION_ERROR` にはしない）。
+      examples:
+        check:
+          value:
+            token: q8Yx0m2kZp7Lw3Nf9RtV1sBc5HdGe6JaUoXiYb4MqKc
+responses:
+  "200":
+    description: トークンは有効。トークンは消費されない。
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - valid
+          properties:
+            valid:
+              type: boolean
+              const: true
+              description: 常に `true`。無効な場合は 400 `TOKEN_INVALID` を返す。
+        examples:
+          valid:
+            value:
+              valid: true
+  "400":
+    $ref: ../components/responses/TokenInvalid.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "413":
+    $ref: ../components/responses/RequestTooLarge.yaml
+  "415":
+    $ref: ../components/responses/UnsupportedMediaType.yaml
+  "429":
+    $ref: ../components/responses/RateLimited.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

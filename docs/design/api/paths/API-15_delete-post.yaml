@@ -1,0 +1,72 @@
+operationId: deletePost
+summary: API-15 投稿の削除
+x-api-id: API-15
+tags:
+  - Posts
+description: |
+  `DELETE /api/posts/{post_id}`（R-15）
+
+  ## 概要
+
+  自分の投稿を削除する。MinIO 上の画像も削除する（PST-06）。
+
+  - 関連要件 ID: PST-06
+  - 利用画面: SCR-09
+  - ログイン: 必須。`X-CSRF-Token` が必要（Origin の検査も行う。README 1.4）。
+
+  ## レスポンス
+
+  204（ボディなし）。
+
+  ## 備考
+
+  - 使用テーブル: `posts`、`likes`（`CASCADE` で削除）、`object_deletions`。
+  - 処理（1 つのトランザクション）: 投稿の行を削除し、`image_key` と `thumbnail_key` を `object_deletions` に追加する。
+    コミット後に MinIO のオブジェクトの削除を試み、成功した予約は消す。失敗しても応答は 204 のままで、定期ジョブが再試行する（db.md 5 章）。
+  - 副作用: 画像の削除。ブラウザのキャッシュに画像が残ることは許容する（db.md 5 章）。
+  - 2 回目以降の呼び出しは 404（冪等にはしない。削除済みの検知が画面の動作に必要なため。screens SCR-09）。
+  - パス `post_id` の形式が不正なときは DB を引かずに 404 `POST_NOT_FOUND`（README 1.1）。
+  - 共通エラー: 401 `UNAUTHENTICATED`、403 `CSRF_INVALID`、500 `INTERNAL_ERROR`、503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security:
+  - sessionCookie: []
+    csrfToken: []
+parameters:
+  - $ref: ../components/parameters/post_id.yaml
+responses:
+  "204":
+    description: 削除した。ボディなし。
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "403":
+    description: |
+      403。`code` は次のいずれか。画面は `code` で分岐する。
+      - `CSRF_INVALID`: Origin の検査またはトークンの検査に失敗した（README 1.4）。
+      - `FORBIDDEN`: 他人の投稿（権限。要件 3 章）。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          csrfInvalid:
+            summary: CSRF トークン不一致
+            value:
+              error:
+                code: CSRF_INVALID
+                message: リクエストを確認できませんでした。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+          forbidden:
+            summary: 他人の投稿
+            value:
+              error:
+                code: FORBIDDEN
+                message: この投稿を削除する権限がありません。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+  "404":
+    $ref: ../components/responses/PostNotFound.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

@@ -1,0 +1,19 @@
+type: object
+title: LikeState
+description: |
+  いいねの操作後の状態（API-16、17）。`liked` は操作後の状態で、API-16 では常に `true`、API-17 では常に `false`。
+  `like_count` は操作の直後に数え直した値。他の人の同時の操作で画面の表示とずれることがあるが、次の取得で直る。
+required:
+  - liked
+  - like_count
+properties:
+  liked:
+    type: boolean
+    description: 操作後の状態（API-16 は常に `true`、API-17 は常に `false`）。
+  like_count:
+    type: integer
+    minimum: 0
+    description: 操作後のいいね数。
+examples:
+  - liked: true
+    like_count: 13

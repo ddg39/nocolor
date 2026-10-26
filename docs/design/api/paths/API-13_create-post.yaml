@@ -1,0 +1,206 @@
+operationId: createPost
+summary: API-13 投稿の作成
+x-api-id: API-13
+tags:
+  - Posts
+description: |
+  `POST /api/posts`（R-13）
+
+  ## 概要
+
+  白黒画像 1 枚と任意のキャプションで投稿する（PST-01）。画像の形式・サイズ・アニメーションを検査し、全ピクセルが白黒かを検査して、
+  白黒でなければ拒否する（PST-05）。白黒への変換はバックエンドでは行わない（PST-04）。
+
+  - 関連要件 ID: PST-01〜PST-05, PST-08, TML-06, 6.2, 6.3
+  - 利用画面: SCR-08
+  - ログイン: 必須。リクエストは `multipart/form-data` で、`X-CSRF-Token` が必要（Origin の検査も行う。README 1.4）。
+
+  ## レスポンス
+
+  成功時は 201 Created。`Location: /api/posts/{id}`。本文は Post（API-11 の項目と同じ）。`like_count` は 0、`liked_by_me` は `false`。
+
+  ## 備考
+
+  - 使用テーブル: `posts`、`object_deletions`（失敗時の後始末）、`rate_limits`。
+  - 共通エラー: 401 `UNAUTHENTICATED`、403 `CSRF_INVALID`、400 `BAD_REQUEST`（multipart として解釈できない）、
+    413 `REQUEST_TOO_LARGE`（multipart の画像以外の部分が大きすぎる）、415 `UNSUPPORTED_MEDIA_TYPE`（`multipart/form-data` 以外）、
+    500 `INTERNAL_ERROR`。定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+  - **処理順**（安価な検査を先に行う。API-24 のアイコンも (2)〜(8) を共有する）:
+    (1) キャプションの検証、
+    (2) サイズ超過の検出（受信を `max_image_bytes` + 余裕で打ち切る）、
+    (3) 先頭バイト（マジックナンバー）で形式を判定。拡張子と、パートの `Content-Type` は見ない（6.2）、
+    (4) **ヘッダーから寸法を読み、各辺が 65535px 以下かつ総画素数が 1 億以下でなければ、復号せず 400 `IMAGE_RESOLUTION_TOO_LARGE`**
+    （固定の安全弁。10MB 以下のファイルでも PNG などは数億画素に展開でき、メモリを使い切られるため。
+    DB の `SMALLINT UNSIGNED`（65535 まで）に寸法が収まることの保証にもなる。要件 8 章の「最大解像度」は未決で、これとは別。
+    決まれば `MAX_IMAGE_SIDE`・`MAX_IMAGE_PIXELS` として、より厳しい側を効かせる）、
+    (5) アニメーションの検出、
+    (6) 復号、
+    (7) **全ピクセルの白黒判定**（`max(R,G,B) - min(R,G,B)` が許容値以下。完全に透明なピクセルは除く。4.3）、
+    (8) メタデータの除去と向きの焼き込み（PST-08。下の「形式ごとの処理」）、
+    (9) サムネイルを生成（寸法は要件 8 章・未決。縦横比を保つ）。
+  - **実装の注意（メモリ）**: 復号後の画素のメモリは、形式と画素数で次のとおり大きく変わる（Go の標準・準標準ライブラリの場合の目安）。
+
+    | 形式 | 復号後の型 | 1 画素あたり | 1 億画素 |
+    | --- | --- | --- | --- |
+    | PNG（8 ビット RGB／RGBA／パレット） | NRGBA／RGBA／Paletted | 4 バイト（パレットは 1） | 約 400MB |
+    | PNG（16 ビット） | NRGBA64／RGBA64／Gray16 | 8 バイト（Gray16 は 2） | 約 800MB |
+    | JPEG | YCbCr（4:4:4 で 3、4:2:0 で 1.5）／Gray | 1〜3 バイト | 約 100〜300MB |
+    | WebP | NRGBA／YCbCr | 4 バイト／1.5〜3 バイト | 約 150〜400MB |
+
+    向きの焼き込み（回転）とサムネイル生成で、作業用に元と同程度の領域がさらに要る（回転後の画像の分。サムネイルは小さい）。
+    したがって 1 億画素の 16 ビット PNG 1 枚で、最大 **約 1.6GB** を使いうる。対策は次のとおり。
+    - 同時に処理する画像は、**画素数で重み付けしたセマフォ**で制限する。重みは「画素数 × 形式ごとの 1 画素あたりのバイト数 × 2（作業領域）」の見積もりで、
+      ヘッダーから (4) の時点で計算できる。容量は `IMAGE_MEMORY_BUDGET`（既定 2GB）とし、超える分は待たせる。
+      1 枚で予算を超える見積もりの画像は、予算全体を占有して単独で処理する（拒否はしない。拒否の基準は安全弁と要件 8 章の上限だけ）。
+      既定の予算では、1 億画素の 16 ビット PNG 同士は同時に処理されない。
+    - 待ち時間が長くなりすぎないよう、待機に上限（例: 30 秒）を設け、超えたら 503 `SERVICE_UNAVAILABLE` を返す。
+    - **backend コンテナのメモリの目安**: 上の予算 2GB に、Go のヒープの余裕（GC で最大 2 倍近く膨らむ）と他の処理を加えて、**4GB 以上**を割り当てる。
+      要件 8 章で最大解像度が決まり、安全弁より厳しくなれば（例: 約 5000 万画素なら 16 ビット PNG で約 800MB）、予算とコンテナのメモリを下げられる。
+      メモリを抑えたい場合は、安全弁の総画素数を下げるのが最も効く。
+  - **形式ごとの処理（(8)）**: 出力の形式は要件 8 章・未決（README Q-1）。画面設計 U-01 の案（JPEG 入力は JPEG、PNG・WebP 入力は PNG）を前提に書く。
+    EXIF の向き（Orientation）が 1 以外のものは、画素を回転して焼き込み、向きの情報は残さない。
+
+    | 入力 | 向きが 1 または無い | 向きが 1 以外 |
+    | --- | --- | --- |
+    | JPEG | 再エンコードしない。APP1（EXIF・XMP）・APP2（ICC）・APP13（Photoshop）・COM などのメタデータのセグメントだけを取り除く（無劣化）。**APP0（JFIF）と APP14（Adobe）は残す**。APP14 の transform は、RGB 符号化と YCbCr 符号化のどちらで復号するかを決めるので、消すと白黒と判定した画像が配信時にカラーで表示されうる（PST-05 の保証が崩れる）ため。セグメントは許可リスト方式（SOF・DHT・DQT・DRI・SOS・APP0・APP14 など、復号に必要なもの）で残し、それ以外を捨てる | 復号して回転し、JPEG に再エンコード（品質は高め。例: 90）。メタデータは出力に含まれない |
+    | PNG | 復号して PNG に再エンコード（Go の `image/png` は付随チャンクを書かない。無劣化）。`tEXt`・`iTXt`・`zTXt`・`eXIf`・`iCCP` などは残らない | 復号して回転し、PNG に再エンコード |
+    | WebP | 復号（`golang.org/x/image/webp`）して PNG に再エンコード。メタデータは残らない | 復号して回転し、PNG に再エンコード |
+
+    保存した画像の寸法を `image_width`・`image_height` にする（回転後の値）。
+  - **WebP を出力する場合に必要な依存（Q-1・Q-3 の判断材料）**: Go の `golang.org/x/image/webp` は**復号のみ**で、エンコーダーが無い。
+    上の案（WebP を PNG にして保存する）なら追加の依存は要らない。一方、(a) 元画像を WebP のまま保存する場合
+    （向きが 1 のときは RIFF の `EXIF`・`XMP `・`ICCP` チャンクを取り除いて `VP8X` のフラグを直す方法で再エンコードを避けられるが、
+    向きが 1 以外のときは再エンコードが要る）、(b) サムネイルを WebP にする場合（db.md Q-1 の案）は、
+    libwebp を使う cgo のバインディング、または別の WebP エンコーダーの導入が必要になる。cgo を使うと、backend のビルドイメージ
+    （C コンパイラ、libwebp-dev）と実行イメージ（共有ライブラリ）が変わり、クロスコンパイルもしにくくなる。判断は Q-1・Q-3 で行う。
+  - 保存: 元画像とサムネイルを MinIO に保存し（キーは `posts/{UUIDv4}.{拡張子}`、`thumbs/{UUIDv4}.{拡張子}`。投稿 ID と無関係の UUID。ADR 001）、
+    そのあとで `posts` に行を追加する。ULID は backend が単調増加で生成する。DB の追加に失敗したら保存したキーを削除し、
+    削除も失敗したら `object_deletions` に予約する（db.md 5 章）。
+  - `Content-Type` は検査した形式から決めて MinIO のオブジェクトに設定する（ADR 001）。
+  - 画像の寸法（`image_width` 等）は保存時に算出して `posts` に保存する。
+  - 二重投稿の防止はクライアントの責任とする（設計判断 D-14）。
+  - レート制限: `post_user`（ログイン中のユーザー単位。30 回 / 1 時間。README 1.8）。
+security:
+  - sessionCookie: []
+    csrfToken: []
+requestBody:
+  required: true
+  content:
+    multipart/form-data:
+      schema:
+        type: object
+        required:
+          - image
+        properties:
+          image:
+            type: string
+            format: binary
+            description: |
+              投稿する画像。JPEG・PNG・WebP（**中身で判定**する。拡張子・パートの `Content-Type` は見ない）、
+              `max_image_bytes`（API-02）以下、アニメーションでない、白黒であること。パートは 1 つだけ（複数は 400 `BAD_REQUEST`）。
+              画像パートが無い場合は 400 `VALIDATION_ERROR`（`fields.image` = `REQUIRED`）。
+          caption:
+            type: string
+            default: ""
+            description: |
+              キャプション（PST-01。README 1.9）。前処理（改行の LF への正規化）の後に 0〜500 文字（コードポイントで数える）。
+              前処理の前の値に `maxLength` は付けない。未指定は空文字。
+              改行は LF に正規化してから数え、改行は保持する。前後の空白は除かない。LF・タブ以外の制御文字
+              （U+0000〜U+001F、U+007F〜U+009F）は不可。
+              項目別コード: 長いは `TOO_LONG`、制御文字は `INVALID_CHARS`。
+      # encoding は許可する形式を示すための記述である。サーバーはパートの Content-Type を見ず、中身で判定する（6.2）。
+      encoding:
+        image:
+          contentType: image/jpeg, image/png, image/webp
+responses:
+  "201":
+    description: |
+      投稿を作成した。`Location` に作成した投稿の URL を返す。本文は Post。`like_count` は 0、`liked_by_me` は `false`。
+    headers:
+      Location:
+        description: 作成した投稿の URL（`/api/posts/{id}`）。
+        required: true
+        schema:
+          type: string
+          pattern: '^/api/posts/'
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Post.yaml
+        examples:
+          created:
+            value:
+              id: 01JC8ZQ4V6S2R9T3M7X5N1B0KD
+              image_url: /images/posts/3f1c2a9e-7b0d-4c8a-9d52-1e6f0a7b4c11.jpg
+              image_width: 2400
+              image_height: 1600
+              thumbnail_url: /images/thumbs/a81d5e07-93c2-4b6a-8f10-5c7d2e9b0a44.jpg
+              thumbnail_width: 600
+              thumbnail_height: 400
+              caption: 朝の駅
+              created_at: "2026-10-26T05:30:12.345Z"
+              like_count: 0
+              liked_by_me: false
+              author:
+                username: alice
+                display_name: Alice
+                icon_url: null
+  "400":
+    description: |
+      400。`code` は次のいずれか。
+      - `VALIDATION_ERROR`: `fields.caption` = `TOO_LONG` / `INVALID_CHARS`。`fields.image` = `REQUIRED`（画像パートが無い）。
+      - `NOT_GRAYSCALE`: 白黒でない（PST-05。画面に「白黒画像のみ投稿できます」を出す）。
+      - `INVALID_IMAGE`: 壊れていて復号できない。
+      - `ANIMATED_IMAGE`: アニメーション PNG（`acTL`）・WebP（アニメーションフラグ）（PST-03）。
+      - `IMAGE_RESOLUTION_TOO_LARGE`: ヘッダーの寸法がいずれかの辺で 65535px 超、または総画素数 1 億超（固定の安全弁）。
+        要件 8 章の上限が決まったら、それを超える場合も同じ。
+      - `BAD_REQUEST`: multipart として解釈できない、画像パートが複数ある。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          notGrayscale:
+            summary: 白黒でない
+            value:
+              error:
+                code: NOT_GRAYSCALE
+                message: 白黒画像のみ投稿できます。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+          captionTooLong:
+            summary: キャプションが長すぎる
+            value:
+              error:
+                code: VALIDATION_ERROR
+                message: 入力内容を確認してください。
+                fields:
+                  caption: TOO_LONG
+                request_id: 7f3c9b1e2a4d4c0e9a51
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "413":
+    $ref: ../components/responses/ImageTooLarge.yaml
+  "415":
+    $ref: ../components/responses/UnsupportedImageType.yaml
+  "429":
+    $ref: ../components/responses/RateLimited.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    description: |
+      503 `SERVICE_UNAVAILABLE`。MinIO に保存できない。または、画像の復号・変換のメモリ待ちが上限（例: 30 秒）を超えた。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          storageUnavailable:
+            value:
+              error:
+                code: SERVICE_UNAVAILABLE
+                message: 現在処理できません。しばらくしてからお試しください。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51

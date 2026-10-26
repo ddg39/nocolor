@@ -1,0 +1,13 @@
+type: string
+title: Username
+description: |
+  ユーザー名（4.1）。3〜20 文字、`[a-z0-9_]` のみ。一意。加工しない（大文字や空白はエラー）。登録後は変更不可。
+  文字数はコードポイントで数える。DB の連番 ID は API・URL・カーソルの平文に出さない（db.md D-2）。
+
+  エラーの判定順は 空: `REQUIRED`、範囲外の文字: `INVALID_CHARS`、短い: `TOO_SHORT`、長い: `TOO_LONG`（この順）。
+  パスのユーザー名がこの形式に合わないときは、DB を引かずに 404 `USER_NOT_FOUND` を返す（400 ではない。README 1.1）。
+minLength: 3
+maxLength: 20
+pattern: '^[a-z0-9_]+$'
+examples:
+  - alice

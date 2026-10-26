@@ -1,0 +1,19 @@
+description: |
+  400。API-04（メール確認）・API-09（再設定リンクの確認）で、次のいずれか。
+  - `TOKEN_INVALID`: トークンが存在しない、期限切れ、使用済み、形式不正。区別しない（設計判断 D-8）。
+    有効期限は API ごとに異なる（確認メール 24 時間、再設定メール 1 時間）。使用済みで 400 になるのは API-09 で、
+    API-04 では本登録済みを 409 `ALREADY_VERIFIED` で返す。
+    形式が違えば DB を引かず `TOKEN_INVALID` を返す（`VALIDATION_ERROR` にはしない）。
+  - `BAD_REQUEST`: JSON として解釈できない（不正な UTF-8 を含む場合を含む）、または項目の型が違う。`fields` は `{}`。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      tokenInvalid:
+        value:
+          error:
+            code: TOKEN_INVALID
+            message: このリンクは無効か、期限が切れています。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

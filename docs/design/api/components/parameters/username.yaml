@@ -1,0 +1,8 @@
+name: username
+in: path
+required: true
+description: |
+  ユーザー名（README 1.2。`^[a-z0-9_]{3,20}$`）。
+  形式に合わないときは、DB を引かずに 404 `USER_NOT_FOUND` を返す（400 ではない）。
+schema:
+  $ref: ../schemas/Username.yaml

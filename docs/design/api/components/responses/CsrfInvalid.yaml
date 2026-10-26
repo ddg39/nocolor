@@ -1,0 +1,20 @@
+description: |
+  403 `CSRF_INVALID`。次のいずれか（README 1.4）。
+  - Origin の検査に失敗した（`Origin` が `APP_BASE_URL` と完全一致しない、`Origin: null`、`Origin` が無く `Sec-Fetch-Site` が `same-origin`・`none` 以外）。状態を変更するすべてのリクエストが対象。
+  - ログイン必須の変更系 API で、`X-CSRF-Token` ヘッダーが無い、またはセッションに結び付いたトークンと一致しない。
+
+  クライアントは API-01 を取り直して 1 回だけ再試行してよい。それでも 403 なら画面設計 3.6.2 の文言を出す。
+  403 には `EMAIL_NOT_VERIFIED`・`FORBIDDEN` もあるので、画面は `code` で分岐する。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      csrfInvalid:
+        summary: CSRF トークン不一致
+        value:
+          error:
+            code: CSRF_INVALID
+            message: リクエストを確認できませんでした。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

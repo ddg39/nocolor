@@ -1,0 +1,174 @@
+operationId: updateProfile
+summary: API-24 プロフィールの更新
+x-api-id: API-24
+tags:
+  - Me
+description: |
+  `PUT /api/me/profile`（R-24）
+
+  ## 概要
+
+  自分の表示名・自己紹介・アイコンを 1 回の呼び出しで更新する（PRF-03、PRF-04）。
+  **テキストとアイコンを原子的に更新し**、途中まで成功した状態を作らない。
+
+  - 関連要件 ID: PRF-03, PRF-04, PST-02〜PST-05, PST-08
+  - 利用画面: SCR-12
+  - ログイン: 必須。リクエストは `multipart/form-data` で、`X-CSRF-Token` が必要（Origin の検査も行う。README 1.4）。
+
+  PUT なので、表示名と自己紹介は変更がなくても常に送る（現在の値を API-18 で取得してフォームに入れているため、画面にとって負担はない）。
+
+  ## レスポンス
+
+  成功時は 200。本文は更新後の Profile（API-18 と同じ形）。`is_following` は `false`。
+
+  ## 備考
+
+  - 使用テーブル: `users`、`object_deletions`、`rate_limits`。
+  - 共通エラー: 401 `UNAUTHENTICATED`、403 `CSRF_INVALID`、400 `BAD_REQUEST`（multipart として解釈できない）、
+    413 `REQUEST_TOO_LARGE`（multipart の画像以外の部分が大きすぎる）、415 `UNSUPPORTED_MEDIA_TYPE`（`multipart/form-data` 以外）、
+    500 `INTERNAL_ERROR`。定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+  - **アイコンの画像処理**（`replace` のとき。サーバーで縮小して保存する。設計判断 D-27）:
+    API-13 の処理順 (2)〜(8)（サイズ・形式・解像度の安全弁・アニメーション・復号・白黒判定・メタデータの除去と向きの焼き込み）を行ったあと、
+    **長辺 256px に縮小**する。縦横比を保ち、切り抜きはしない。元の長辺が 256px 以下なら拡大せずそのままの寸法にする。
+    **元画像は保存しない**（MinIO に置くのは縮小後の 1 枚だけ）。縮小は画素の補間だけで色の変換はしないので、
+    要件 2.2（バックエンドでの白黒変換をしない）に抵触しない。縮小後の形式はサムネイルと同じで、要件 8 章の未決（Q-3）に従う。
+    保存後の寸法は DB に持たず、`icon_url` だけを返す（db.md の `avatar_key` のみ）。
+  - **処理**: テキストと画像のすべての検証を先に終える。
+    - `replace` のときは新しいキー（`avatars/{UUIDv4}.{拡張子}`。ADR 001 のとおり同じキーを上書きしない）に、
+      上の縮小後の画像を MinIO に保存し、**1 つのトランザクション**で `users` の `display_name`・`bio`・`avatar_key` を更新して、
+      旧キーを `object_deletions` に追加する。
+    - `remove` のときは `avatar_key` を `NULL` にして旧キーを予約する。
+    - DB の更新に失敗したら、新しく保存したキーを削除する。
+    - 検証に 1 つでも失敗したら、何も変更しない。
+  - アイコンが未設定のときの `remove` は何もせず成功する。
+  - 副作用: MinIO への保存・削除（旧画像の削除は予約方式。db.md 5 章）。
+  - ユーザー名・メールアドレスは変更できない（4.1、2.2）。
+  - レート制限: `profile_user`（ログイン中のユーザー単位。30 回 / 1 時間。README 1.8）。
+security:
+  - sessionCookie: []
+    csrfToken: []
+requestBody:
+  required: true
+  content:
+    multipart/form-data:
+      schema:
+        type: object
+        required:
+          - display_name
+          - bio
+        properties:
+          display_name:
+            type: string
+            minLength: 1
+            description: |
+              表示名（PRF-03。README 1.9）。前処理（前後の空白〔Unicode の空白〕の除去）の後に 1〜30 文字（コードポイントで数える）。
+              前処理の前の値に `maxLength` は付けない。
+              改行・制御文字は不可。
+              項目別コード: 空（空白のみを含む）は `REQUIRED`、長いは `TOO_LONG`、制御文字は `INVALID_CHARS`。
+          bio:
+            type: string
+            description: |
+              自己紹介（PRF-03。README 1.9）。前処理（改行の LF への正規化）の後に 0〜160 文字（コードポイントで数える）。
+              前処理の前の値に `maxLength` は付けない。空文字は「空にする」の意味。
+              改行は LF に正規化してから数え、改行は保持する。前後の空白は除かない。LF・タブ以外の制御文字
+              （U+0000〜U+001F、U+007F〜U+009F）は不可。
+              項目別コード: 長いは `TOO_LONG`、制御文字は `INVALID_CHARS`。
+          icon_action:
+            type: string
+            enum:
+              - keep
+              - replace
+              - remove
+            default: keep
+            description: |
+              アイコンの扱い。`keep`（既定。変更しない）/ `replace`（`icon` で置き換える）/ `remove`（アイコンを削除する）。
+              それ以外の値は 400 `VALIDATION_ERROR`（`fields.icon_action` = `INVALID_VALUE`）。
+          icon:
+            type: string
+            format: binary
+            description: |
+              新しいアイコン画像。`icon_action` が `replace` のとき必須。API-13 の `image` と同じ規則
+              （JPEG・PNG・WebP を**中身で判定**する。拡張子・パートの `Content-Type` は見ない。
+              `max_image_bytes`（API-02）以下、アニメーションでない、白黒であること。解像度の安全弁）。
+              `keep`・`remove` のときに付いていたら `fields.icon` = `UNEXPECTED`、`replace` で無いなら `fields.icon` = `REQUIRED`。
+      # encoding は許可する形式を示すための記述である。サーバーはパートの Content-Type を見ず、中身で判定する（6.2）。
+      encoding:
+        icon:
+          contentType: image/jpeg, image/png, image/webp
+responses:
+  "200":
+    description: 更新後のプロフィール。API-18 と同じ形で、`is_following` は `false`。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Profile.yaml
+        examples:
+          updated:
+            value:
+              username: alice
+              display_name: Alice
+              bio: 朝の光を撮っています。
+              icon_url: /images/avatars/9b2e7c40-1d3a-4f5b-8c6d-2a1e0f9b7d33.jpg
+              post_count: 12
+              following_count: 34
+              follower_count: 56
+              is_following: false
+  "400":
+    description: |
+      400。`code` は次のいずれか。
+      - `VALIDATION_ERROR`: `fields` に `display_name` / `bio` / `icon` / `icon_action` の項目別コード。
+      - `NOT_GRAYSCALE`: アイコンが白黒でない（PRF-04）。
+      - `INVALID_IMAGE`: アイコンが壊れている。
+      - `ANIMATED_IMAGE`: アイコンがアニメーション。
+      - `IMAGE_RESOLUTION_TOO_LARGE`: アイコンの寸法が、いずれかの辺で 65535px 超、または総画素数 1 億超（固定の安全弁。API-13 の処理順 (4)）。
+        要件 8 章の上限が決まったら、それを超える場合も同じ。
+      - `BAD_REQUEST`: multipart として解釈できない。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          notGrayscale:
+            summary: アイコンが白黒でない
+            value:
+              error:
+                code: NOT_GRAYSCALE
+                message: 白黒画像のみ設定できます。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+          displayNameEmpty:
+            summary: 表示名が空
+            value:
+              error:
+                code: VALIDATION_ERROR
+                message: 入力内容を確認してください。
+                fields:
+                  display_name: REQUIRED
+                request_id: 7f3c9b1e2a4d4c0e9a51
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "413":
+    $ref: ../components/responses/ImageTooLarge.yaml
+  "415":
+    $ref: ../components/responses/UnsupportedImageType.yaml
+  "429":
+    $ref: ../components/responses/RateLimited.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    description: |
+      503 `SERVICE_UNAVAILABLE`。MinIO に保存できない。または、画像の復号・変換のメモリ待ちが上限を超えた（API-13 の備考）。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          storageUnavailable:
+            value:
+              error:
+                code: SERVICE_UNAVAILABLE
+                message: 現在処理できません。しばらくしてからお試しください。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51

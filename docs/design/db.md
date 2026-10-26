@@ -151,7 +151,7 @@ DELETE FROM users
 
 #### 登録処理の流れ（API-03）
 
-メールアドレスの重複は画面に出さない（ACC-09 の考え方を登録にも適用する。確定事項）。ユーザー名の重複だけが 409 `USERNAME_TAKEN` になる。7 日以内の仮登録または本登録済みのユーザーと同じ値で登録しようとすると一意制約違反（MySQL エラー 1062）になるので、次の流れで分岐する。**この流れが [API-03](api/API-03_signup.md) の処理順の正である**（api/README.md はこれに合わせる）。
+メールアドレスの重複は画面に出さない（ACC-09 の考え方を登録にも適用する。確定事項）。ユーザー名の重複だけが 409 `USERNAME_TAKEN` になる。7 日以内の仮登録または本登録済みのユーザーと同じ値で登録しようとすると一意制約違反（MySQL エラー 1062）になるので、次の流れで分岐する。**この流れが [API-03](api/paths/API-03_signup.yaml) の処理順の正である**（api/README.md はこれに合わせる）。
 
 1. 入力の検証とレート制限（`signup_mail_*`）の後、**メール送信キューの空きを 1 つ確保する**（api/README.md 1.11）。確保できなければ 503 `SERVICE_UNAVAILABLE`（ユーザーは作らない）。キューの状態はアドレスの登録の有無と無関係なので ACC-09 に反しない。確保した枠は、以降の手順で 409 や失敗になった場合は戻す。
 2. **パスワードの bcrypt ハッシュを計算する**。成功経路と重複経路で処理時間に差が出ないよう、ハッシュは分岐の前に必ず計算する。
@@ -551,7 +551,7 @@ SELECT p.id, p.image_key, p.image_width, p.image_height,
 | `CountFollowers` | API-20・21 の `follower_count`（対象ユーザーのフォロワー数） | `SELECT COUNT(*) FROM follows WHERE followee_id = sqlc.arg(user_id)` | `idx_follows_followee_created` |
 
 - `CountFollowers` の `followee_id` には、`GetVerifiedUserByUsername` で解決した対象ユーザーの `id` を渡す。
-- 操作（`INSERT` / `DELETE`）と同じトランザクションの中で数えても、コミット後に数えてもよい。他人の同時の操作でずれうるが、次の取得で直る（[API-16](api/API-16_like-post.md)）。`GetUserProfile` の `follower_count` と同じ数え方なので、値の意味は一致する。
+- 操作（`INSERT` / `DELETE`）と同じトランザクションの中で数えても、コミット後に数えてもよい。他人の同時の操作でずれうるが、次の取得で直る（[API-16](api/paths/API-16_like-post.yaml)）。`GetUserProfile` の `follower_count` と同じ数え方なので、値の意味は一致する。
 - 投稿の存在確認（API-17 の 404 判定）には `ExistsPost`（`SELECT 1 FROM posts WHERE id = sqlc.arg(post_id)`、PRIMARY）を使う。API-16 は外部キー違反（1452）で検知する。
 
 ### 4.4 いいね・フォロー
@@ -605,7 +605,7 @@ SELECT f.follower_id AS user_id, u.username, u.display_name, u.bio, u.avatar_key
 | `ListFollowing` | `idx_follows_follower_created (follower_id, created_at, followee_id)` | `follower_id` の等値 + `created_at` / `followee_id` の範囲を降順に読む |
 | `ListFollowers` | `idx_follows_followee_created (followee_id, created_at, follower_id)` | `followee_id` の等値 + `created_at` / `follower_id` の範囲を降順に読む |
 
-- 返す項目は API の UserSummary（api/README.md 1.7）に対応する。`user_id`（相手の内部 ID）はカーソル用で API には出さず、`bio` は UserSummary の `bio`、`followed_by_me` は `is_following`（閲覧者自身の行は API 側で `false` にする）になる。
+- 返す項目は API の UserSummary（[api/components/schemas/UserSummary.yaml](api/components/schemas/UserSummary.yaml)）に対応する。`user_id`（相手の内部 ID）はカーソル用で API には出さず、`bio` は UserSummary の `bio`、`followed_by_me` は `is_following`（閲覧者自身の行は API 側で `false` にする）になる。
 - 先頭ページは `cursor_at` に最大の日時（`9999-12-31 23:59:59.999`）、`cursor_user_id` に `BIGINT UNSIGNED` の最大値を渡す。
 - 相手側の `users` の条件（`email_verified_at IS NOT NULL`）は、`follows` が本登録済み同士でしか作られないため通常は常に真で、結果は変わらない（防御）。`users` は主キーで引く行の列を見るだけなので、インデックスへの影響はない。
 - **実装時の確認手順**: 各クエリを `EXPLAIN` で確認し、`type` が `range`、`key` が上表のキー、`Extra` に `Using filesort` が無く（`Backward index scan` は正常）、`EXPLAIN ANALYZE` の読み取り行数が `row_limit` 前後であることを確認する。1 ユーザーが 1 万人をフォローしているデータでも確認する。範囲スキャンにならない場合は、`UNION ALL` で「`created_at < ?`」と「`created_at = ? AND id < ?`」の 2 つの範囲に分けて上位 `row_limit` 件を取る書き方に変える。

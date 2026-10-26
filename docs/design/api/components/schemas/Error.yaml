@@ -1,0 +1,43 @@
+type: object
+title: Error
+description: |
+  HTTP ステータスが 4xx・5xx のときの本文（README 1.6）。
+required:
+  - error
+properties:
+  error:
+    type: object
+    required:
+      - code
+      - message
+      - fields
+      - request_id
+    properties:
+      code:
+        $ref: ./ErrorCode.yaml
+      message:
+        type: string
+        description: |
+          日本語の短い説明。ログや curl での確認用。**画面にそのまま出さない**（screens D-21）。
+          内部情報（SQL、パス、スタックトレース）を含めない。
+      fields:
+        type: object
+        description: |
+          項目名 → 項目別コード。`VALIDATION_ERROR`・`USERNAME_TAKEN` のときだけ値が入る。ほかは `{}`（キーは省略しない）。
+          キーはリクエストの項目名（`email`、`username`、`password`、`display_name`、`bio`、`caption`、`image`、`icon`、
+          `icon_action`、`limit`、`identifier`、`token` など）と同じにする。
+        additionalProperties:
+          $ref: ./FieldErrorCode.yaml
+      request_id:
+        type: string
+        description: |
+          リクエストごとの識別子。同じ値を応答ヘッダー `X-Request-Id` にも付け、サーバーのログに残す。画面の「エラー番号」に使う。
+          リクエストヘッダー `X-Request-Id`（英数字とハイフンで 64 文字以内）があればそれを使い、無ければ生成する。
+examples:
+  - error:
+      code: VALIDATION_ERROR
+      message: 入力内容を確認してください。
+      fields:
+        username: TOO_SHORT
+        password: NEED_LETTER_AND_DIGIT
+      request_id: 7f3c9b1e2a4d4c0e9a51

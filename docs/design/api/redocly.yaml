@@ -1,0 +1,14 @@
+# OpenAPI の lint 設定。リポジトリのルートで次のように実行する。
+#   npx -y @redocly/cli@2 lint docs/design/api/openapi.yaml
+#   npx -y @redocly/cli@2 bundle docs/design/api/openapi.yaml -o <出力先>   (コード生成は bundle したファイルで行う)
+extends:
+  - recommended
+
+rules:
+  # 緩めた理由: API-01（現在のユーザーの取得）と API-02（設定値の取得）は、未ログインでも設定が無くても
+  # 常に 200 を返し、業務上の 4xx が存在しない。定義のないパス・メソッドの 404・405 は、
+  # 個別の API ではなく README 1.1 の共通規則として扱う。
+  operation-4xx-response: off
+  # 緩めた理由: このリポジトリにはライセンスの方針がまだ無い（license を勝手に決めない）。
+  # 公開・配布の方針が決まったら info.license を書いてこの設定を削除する。
+  info-license: off

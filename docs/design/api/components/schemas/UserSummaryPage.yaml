@@ -1,0 +1,17 @@
+type: object
+title: UserSummaryPage
+description: |
+  ユーザーの一覧の応答（API-22、23）。カーソル方式のページング（README 1.7）の共通形で、`items` がユーザー要約になる。
+  並びは `(follows.created_at, 相手の内部 ID)` の降順。
+required:
+  - items
+  - next_cursor
+properties:
+  items:
+    type: array
+    maxItems: 50
+    description: ユーザー要約。0 件以上、`limit` 件以下。
+    items:
+      $ref: ./UserSummary.yaml
+  next_cursor:
+    $ref: ./NextCursor.yaml

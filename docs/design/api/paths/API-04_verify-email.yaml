@@ -1,0 +1,101 @@
+operationId: verifyEmail
+summary: API-04 メールアドレスの確認
+x-api-id: API-04
+tags:
+  - Auth
+description: |
+  `POST /api/auth/verify`（R-04）
+
+  ## 概要
+
+  確認メールのリンクのトークンで本登録を完了する（ACC-02、ACC-03）。
+  メールの先読みでトークンが消費されないよう、GET にしない（screens D-06）。
+
+  - 関連要件 ID: ACC-02, ACC-03
+  - 利用画面: SCR-04
+  - ログイン: 不要。CSRF は Origin の検査のみ（README 1.4 (1)）。リクエストは `Content-Type: application/json` が必須。
+  - レート制限: `token_ip`（README 1.8）。
+
+  ## エラー
+
+  - 期限切れと不正を `TOKEN_INVALID` にまとめる。画面設計 SCR-04 のとおり利用者に区別して見せず、
+    DB の期限切れ削除でトークンの行が先に消えている場合とも区別できないため。
+    画面設計で想定していた `TOKEN_EXPIRED` は返さない。
+
+  ## 備考
+
+  - 使用テーブル: `email_verification_tokens`、`users`、`rate_limits`。
+  - 副作用: `users.email_verified_at` を現在時刻にする（`email_verified_at IS NULL` のときだけ更新。
+    並行して 2 回呼ばれても 1 回だけ成功する）。**セッションは作らない**
+    （トークン付き URL でログイン状態にしないため。screens 3.4.3）。
+  - 本登録が完了しても確認トークンは削除せず、期限切れの定期削除に任せる
+    （`ALREADY_VERIFIED` を返せるようにするため。設計判断 D-8）。
+  - 共通エラー: 403 `CSRF_INVALID`（Origin の検査）、413、415、500、503。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security: []
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        required:
+          - token
+        properties:
+          token:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{43}$'
+            description: |
+              確認メールのリンクのトークン。43 文字の Base64URL。
+              形式が違えば DB を引かず 400 `TOKEN_INVALID` を返す（`VALIDATION_ERROR` にはしない）。
+      examples:
+        verify:
+          value:
+            token: q8Yx0m2kZp7Lw3Nf9RtV1sBc5HdGe6JaUoXiYb4MqKc
+responses:
+  "200":
+    description: 本登録が完了した。セッションは作らない。
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - verified
+          properties:
+            verified:
+              type: boolean
+              const: true
+              description: 常に `true`。
+        examples:
+          verified:
+            value:
+              verified: true
+  "400":
+    $ref: ../components/responses/TokenInvalid.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "409":
+    description: |
+      409 `ALREADY_VERIFIED`。すでに本登録済みのユーザーのトークン（使用済みトークンを残すため。設計判断 D-8）。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Error.yaml
+        examples:
+          alreadyVerified:
+            value:
+              error:
+                code: ALREADY_VERIFIED
+                message: すでに本登録が完了しています。
+                fields: {}
+                request_id: 7f3c9b1e2a4d4c0e9a51
+  "413":
+    $ref: ../components/responses/RequestTooLarge.yaml
+  "415":
+    $ref: ../components/responses/UnsupportedMediaType.yaml
+  "429":
+    $ref: ../components/responses/RateLimited.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

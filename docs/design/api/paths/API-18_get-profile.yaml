@@ -1,0 +1,53 @@
+operationId: getProfile
+summary: API-18 プロフィールの取得
+x-api-id: API-18
+tags:
+  - Users
+description: |
+  `GET /api/users/{username}`（R-18）
+
+  ## 概要
+
+  ユーザーのプロフィールを返す（PRF-01、PRF-02）。SCR-12 の初期値にも使う。未ログインでも使える。
+
+  ## 備考
+
+  - 関連要件 ID: PRF-01, PRF-02, FOL-01
+  - 利用画面: SCR-10, SCR-11, SCR-12
+  - 使用テーブル: `users`、`posts`、`follows`（`GetUserProfile`）。
+  - 副作用なし。Cookie が無効でも 401 にせず未ログインとして扱う（README 1.3）。
+  - 自分自身を取得したとき（ユーザー名が閲覧者と同じ）、`is_following` は `false`。未ログインも `false`。
+  - メールアドレスは返さない。
+  - パス `username` の形式（`^[a-z0-9_]{3,20}$`）が不正なときは、DB を引かずに 404 `USER_NOT_FOUND`（400 ではない。README 1.1）。
+    仮登録のまま（`email_verified_at` が `NULL`）のユーザーも 404。
+  - 共通エラー: 想定外の障害は 500 `INTERNAL_ERROR`、一時的に処理できない場合は 503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドは 404 `NOT_FOUND`・405 `METHOD_NOT_ALLOWED`（README 1.1。個別の API には載せない）。
+security:
+  - {}
+  - sessionCookie: []
+parameters:
+  - $ref: ../components/parameters/username.yaml
+responses:
+  "200":
+    description: プロフィール。本文は Profile。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/Profile.yaml
+        examples:
+          profile:
+            value:
+              username: alice
+              display_name: Alice
+              bio: 朝の光を撮っています。
+              icon_url: /images/avatars/9b2e7c40-1d3a-4f5b-8c6d-2a1e0f9b7d33.jpg
+              post_count: 12
+              following_count: 34
+              follower_count: 56
+              is_following: true
+  "404":
+    $ref: ../components/responses/UserNotFound.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

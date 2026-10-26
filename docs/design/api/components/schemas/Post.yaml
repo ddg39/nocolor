@@ -1,0 +1,83 @@
+type: object
+title: Post
+description: |
+  投稿。すべての API で同じ形にする。「出どころ」は db.md のテーブル・カラム（DB 設計に無い項目は返さない）。
+  画像の寸法は、EXIF の向きを反映した後の表示上の幅・高さ（保存時に向きを焼き込むため、保存した画像の寸法と一致する）。
+required:
+  - id
+  - image_url
+  - image_width
+  - image_height
+  - thumbnail_url
+  - thumbnail_width
+  - thumbnail_height
+  - caption
+  - created_at
+  - like_count
+  - liked_by_me
+  - author
+properties:
+  id:
+    $ref: ./PostId.yaml
+  image_url:
+    type: string
+    description: |
+      元画像の URL。`/images/{オブジェクトキー}` の相対パス（ADR 001。ホスト名は含めない）。拡張子は例であり、
+      変換後の形式（要件 8 章・未決。README Q-1）で決まる。出どころ `posts.image_key`。
+    pattern: '^/images/'
+  image_width:
+    type: integer
+    minimum: 1
+    maximum: 65535
+    description: 元画像の幅（px）。出どころ `posts.image_width`。
+  image_height:
+    type: integer
+    minimum: 1
+    maximum: 65535
+    description: 元画像の高さ（px）。出どころ `posts.image_height`。
+  thumbnail_url:
+    type: string
+    description: サムネイルの URL。出どころ `posts.thumbnail_key`。
+    pattern: '^/images/'
+  thumbnail_width:
+    type: integer
+    minimum: 1
+    description: サムネイルの幅（px）。出どころ `posts.thumbnail_width`。
+  thumbnail_height:
+    type: integer
+    minimum: 1
+    description: サムネイルの高さ（px）。出どころ `posts.thumbnail_height`。
+  caption:
+    type: string
+    maxLength: 500
+    description: キャプション。無ければ空文字。出どころ `posts.caption`。
+  created_at:
+    type: string
+    format: date-time
+    description: |
+      投稿日時。RFC 3339 の UTC、ミリ秒付き、末尾 `Z`。出どころ `posts.created_at`（`DATETIME(3)` の UTC をそのまま整形する）。
+  like_count:
+    type: integer
+    minimum: 0
+    description: いいね数。出どころ `COUNT(*) FROM likes`（都度集計。db.md 4.3）。
+  liked_by_me:
+    type: boolean
+    description: 閲覧者がいいね済みか（LIK-03）。未ログインは `false`。出どころ `EXISTS FROM likes`。
+  author:
+    $ref: ./UserBrief.yaml
+examples:
+  - id: 01JC8ZQ4V6S2R9T3M7X5N1B0KD
+    image_url: /images/posts/3f1c2a9e-7b0d-4c8a-9d52-1e6f0a7b4c11.jpg
+    image_width: 2400
+    image_height: 1600
+    thumbnail_url: /images/thumbs/a81d5e07-93c2-4b6a-8f10-5c7d2e9b0a44.jpg
+    thumbnail_width: 600
+    thumbnail_height: 400
+    caption: "朝の駅\n人はまだ少ない"
+    created_at: "2026-10-26T05:30:12.345Z"
+    like_count: 12
+    liked_by_me: false
+    author:
+      username: alice
+      display_name: Alice
+      icon_url: null

@@ -1,0 +1,25 @@
+description: |
+  429 `RATE_LIMITED`。試行回数の制限（要件 6.2。README 1.8）を超えた。対象は API-03、04、05、06、08、09、10、13、24 で、
+  スコープごとの上限は README 1.8 の表のとおり。`Retry-After` ヘッダーに、現在のウィンドウの終わりまでの秒数
+  （複数のスコープが超過したときは最大のもの。最小 1）を付ける。画面は「約 N 分後に」と表示し、ボタンを無効にする。
+  メールアドレス単位の制限は、そのアドレスが登録済みかどうかと無関係に数えるので、ACC-09 に反しない。
+headers:
+  Retry-After:
+    description: 再試行できるまでの秒数（整数。最小 1）。
+    required: true
+    schema:
+      type: integer
+      minimum: 1
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      rateLimited:
+        summary: 試行回数の超過
+        value:
+          error:
+            code: RATE_LIMITED
+            message: 試行回数が上限に達しました。しばらくしてからお試しください。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

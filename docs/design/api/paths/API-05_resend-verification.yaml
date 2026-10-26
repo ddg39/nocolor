@@ -1,0 +1,91 @@
+operationId: resendVerification
+summary: API-05 確認メールの再送
+x-api-id: API-05
+tags:
+  - Auth
+description: |
+  `POST /api/auth/verify/resend`（R-05）
+
+  ## 概要
+
+  確認メールを再送する（ACC-03）。ACC-09 と同じ考え方で、**応答はアドレスの状態（未登録・仮登録・本登録済み）で変えない**。
+
+  - 関連要件 ID: ACC-03, ACC-04, 6.2
+  - 利用画面: SCR-03, SCR-04, SCR-05
+  - ログイン: 不要。CSRF は Origin の検査のみ（README 1.4 (1)）。リクエストは `Content-Type: application/json` が必須。
+  - レート制限: `signup_mail_ip` / `signup_mail_addr`（README 1.8）。
+
+  ## エラー
+
+  - 400 `VALIDATION_ERROR` は形式の検査だけで、アドレスの存在とは無関係。
+  - 503 はメール送信キュー（README 1.11）が満杯のときで、アドレスと無関係に発生する。
+
+  ## 備考
+
+  - 使用テーブル: `users`、`email_verification_tokens`、`rate_limits`。
+  - **応答の同一化**: 同期で行う処理は、検証・レート制限の計数・キューへの投入（README 1.11）だけにする。
+    アドレスの検索、古いトークンの削除、新しいトークンの発行、メール送信は、すべて応答後の非同期ジョブ
+    （プロセス内の容量付きキュー。README 1.11）で行う。キューが満杯なら、アドレスと無関係に 503 を返す。
+    これにより、応答の内容・ステータス・処理時間は、アドレスが未登録でも仮登録でも本登録済みでも同じ経路をたどる。
+  - ジョブの処理: 仮登録（`email_verified_at IS NULL` かつ作成から 7 日以内）のユーザーが見つかったときだけ、
+    そのユーザーの既存トークンを削除して新しいトークンを発行し、メールを送る。
+    本登録済み・未登録・期限切れの仮登録では何もしない。
+  - ACC-05 の 7 日は作成日時から数え、再送では延びない（db.md Q-3）。
+  - 共通エラー: 403 `CSRF_INVALID`（Origin の検査）、413、415、500。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security: []
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        required:
+          - email
+        properties:
+          email:
+            type: string
+            description: |
+              メールアドレス（README 1.9）。前処理（前後の空白の除去と小文字化）の後に 254 文字以内
+              （前処理の前の値に `maxLength` は付けない）。`local@domain` の形で、表示名やコメントを含まず、ドメイン部に `.` を含み、
+              ローカル部は 64 文字以内。実装は Go の `net/mail` で解析し、解析結果のアドレス部が入力と一致することを確認する。
+              前後の空白を除き、小文字にして照合する（db.md 3.1）ので、前処理の前の値を受けるため `format: email` は付けない。
+              項目別コード: 空は `REQUIRED`、長いは `TOO_LONG`、形式は `INVALID_FORMAT`。
+      examples:
+        resend:
+          value:
+            email: alice@example.com
+responses:
+  "202":
+    description: |
+      受け付けた。アドレスが未登録・仮登録・本登録済みのどれでも同じ応答を返す。
+      メールは条件に合う場合だけ非同期に送る。
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - accepted
+          properties:
+            accepted:
+              type: boolean
+              const: true
+              description: 常に `true`。
+        examples:
+          accepted:
+            value:
+              accepted: true
+  "400":
+    $ref: ../components/responses/ValidationError.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "413":
+    $ref: ../components/responses/RequestTooLarge.yaml
+  "415":
+    $ref: ../components/responses/UnsupportedMediaType.yaml
+  "429":
+    $ref: ../components/responses/RateLimited.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailableQueueFull.yaml

@@ -1,0 +1,55 @@
+operationId: unfollowUser
+summary: API-21 フォローを解除する
+x-api-id: API-21
+tags:
+  - Users
+description: |
+  `DELETE /api/users/{username}/follow`（R-21）
+
+  ## 概要
+
+  フォローを解除する（FOL-02）。**冪等**。
+
+  - 関連要件 ID: FOL-02
+  - 利用画面: SCR-10, SCR-11
+  - ログイン: 必須。`X-CSRF-Token` が必要（Origin の検査も行う。README 1.4）。
+
+  ## レスポンス
+
+  成功時は 200。`following` は常に `false`、`follower_count` は操作後の対象のユーザーのフォロワー数。
+
+  ## 備考
+
+  - 使用テーブル: `follows`、`users`。
+  - 影響行数が 0 でも成功とする。
+  - 自分自身を指定しても、フォローが存在しないので成功する（400 にはしない）。
+  - パスの `username` の形式が不正なときは、DB を引かずに 404 `USER_NOT_FOUND` を返す（README 1.1）。
+  - 共通エラー: 401 `UNAUTHENTICATED`、403 `CSRF_INVALID`、500 `INTERNAL_ERROR`、503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security:
+  - sessionCookie: []
+    csrfToken: []
+parameters:
+  - $ref: ../components/parameters/username.yaml
+responses:
+  "200":
+    description: フォローを解除した（もともとフォローしていなくても同じ）。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/FollowState.yaml
+        examples:
+          unfollowed:
+            value:
+              following: false
+              follower_count: 56
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "404":
+    $ref: ../components/responses/UserNotFound.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

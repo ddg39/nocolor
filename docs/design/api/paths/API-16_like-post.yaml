@@ -1,0 +1,53 @@
+operationId: likePost
+summary: API-16 いいねを付ける
+x-api-id: API-16
+tags:
+  - Posts
+description: |
+  `PUT /api/posts/{post_id}/like`（R-16）
+
+  ## 概要
+
+  閲覧者の、その投稿へのいいねを付ける。自分の投稿にも付けられる（LIK-01）。
+  **冪等**で、すでにいいね済みでも成功する。
+
+  - 関連要件 ID: LIK-01, LIK-03
+  - 利用画面: SCR-01, SCR-09
+  - ログイン: 必須。ボディなし。`X-CSRF-Token` が必要（Origin の検査も行う。README 1.4）。
+
+  ## 備考
+
+  - 使用テーブル: `likes`、`posts`。
+  - `INSERT ... ON DUPLICATE KEY UPDATE`（db.md 4.4）。1 ユーザー 1 投稿 1 回は主キー `(post_id, user_id)` が保証する（LIK-01）。
+    存在しない投稿は外部キー違反（1452）で検知して 404 にする。
+  - `like_count` は操作の直後に数え直した値。他の人の同時の操作で画面の表示とずれることがあるが、次の取得で直る。
+  - パス `post_id` の形式が不正なときは DB を引かずに 404 `POST_NOT_FOUND`（README 1.1）。
+  - 共通エラー: 401 `UNAUTHENTICATED`、403 `CSRF_INVALID`、500 `INTERNAL_ERROR`、503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security:
+  - sessionCookie: []
+    csrfToken: []
+parameters:
+  - $ref: ../components/parameters/post_id.yaml
+responses:
+  "200":
+    description: いいね後の状態。`liked` は常に `true`。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/LikeState.yaml
+        examples:
+          liked:
+            value:
+              liked: true
+              like_count: 13
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "404":
+    $ref: ../components/responses/PostNotFound.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml
