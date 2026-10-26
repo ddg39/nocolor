@@ -18,5 +18,8 @@
 - golang-migrate（マイグレーション）
 - セッション + Cookie（認証）
 
+### 配信
+- nginx（リバースプロキシ。構成は [ADR 001](docs/adr/001_delivery-architecture.md) を参照）
+
 ## 開発ルール
 ブランチ運用とコミットメッセージの規則は [CONTRIBUTING.md](CONTRIBUTING.md) を参照。
