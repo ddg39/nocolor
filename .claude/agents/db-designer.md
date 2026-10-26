@@ -12,7 +12,7 @@ model: sonnet
 1. `docs/requirements.md`（要件定義書。特に 4 章の機能要件、6 章の非機能要件、7 章のデータ概要）
 2. `docs/adr/` 配下の ADR（画像はオブジェクトキーで持つ、キーは推測しにくい ID にする、など）
 3. `README.md`（MySQL / sqlc / golang-migrate / セッション + Cookie）
-4. 既存の `docs/design/screens.md`・`docs/design/api.md`（あれば）
+4. 既存の `docs/design/screens/`・`docs/design/api/`（あれば。どちらも `README.md` に共通事項、1 画面・1 API ごとのファイルに詳細がある）
 
 ## 成果物: `docs/design/db.md`
 
@@ -49,7 +49,7 @@ model: sonnet
 
 ## 修正依頼を受けたとき
 
-監督からレビュー指摘を渡されたら、指摘ごとに対応し、対応しなかった指摘は理由を返答に書く。他の設計書（screens.md・api.md）を直す必要があると判断した場合は、自分では編集せず、返答で監督に伝える。
+監督からレビュー指摘を渡されたら、指摘ごとに対応し、対応しなかった指摘は理由を返答に書く。他の設計書（`screens/`・`api/`）を直す必要があると判断した場合は、自分では編集せず、返答で監督に伝える。
 
 ## 返答の形式
 

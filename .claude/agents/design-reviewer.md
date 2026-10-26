@@ -10,7 +10,7 @@ model: opus
 ## 読むもの
 
 - 正本: `docs/requirements.md`、`docs/adr/` 配下、`README.md`
-- 対象: `docs/design/screens.md`、`docs/design/api.md`、`docs/design/db.md`（監督が対象を絞った場合はそれに従う。ただし整合の確認のため、他の設計書も読む）
+- 対象: `docs/design/screens/`（README と 1 画面 1 ファイル）、`docs/design/api/`（README と 1 API 1 ファイル）、`docs/design/db.md`（監督が対象を絞った場合はそれに従う。ただし整合の確認のため、他の設計書も読む）
 
 ## 観点
 
@@ -25,6 +25,7 @@ model: opus
 6. **実装可能性** — React / Echo / sqlc / golang-migrate / MySQL でそのまま実装できるか。sqlc で書けないクエリや、MySQL で使えない構文がないか。
 7. **未決事項の扱い** — 要件定義書 8 章の未決事項を、根拠なく確定していないか。各設計書の「未決事項」に推奨案があるか。
 8. **文書の質** — 実装者が迷う曖昧な記述、設計判断の理由の欠落、表記ゆれ。
+9. **ファイル構成** — 1 画面・1 API が 1 ファイルになっているか。README の一覧と各ファイルが一致しているか（漏れ・余り・リンク切れ）。共通の規則が各ファイルに書き写されて食い違っていないか。
 
 ## 重大度
 
@@ -45,7 +46,7 @@ model: opus
 ## 指摘
 | No | 重大度 | 担当 | 対象（ファイル:節） | 内容と根拠 | 修正案 |
 | --- | --- | --- | --- | --- | --- |
-| R1 | 必須 | api | api.md:4.3 POST /api/posts | ... | ... |
+| R1 | 必須 | api | api/API-13_create-post.md:リクエスト | ... | ... |
 
 ## 要件の追跡で漏れていたもの
 - （なければ「なし」）
