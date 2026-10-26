@@ -1,4 +1,4 @@
-# コントリビューションガイド
+# Git 運用ルール
 
 コミットメッセージは [Angular Commit Message Format](https://github.com/angular/angular/blob/main/contributing-docs/commit-message-guidelines.md)（Google の Angular チームが定めた形式）に、説明文の書き方は [Google Engineering Practices: Writing good CL descriptions](https://google.github.io/eng-practices/review/developer/cl-descriptions.html) にもとづく。
 
