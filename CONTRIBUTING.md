@@ -46,7 +46,8 @@ hotfix/image-validation
 
 - ヘッダー（1行目）は必須。本文とフッターは任意だが、自明な変更以外は本文を書く。
 - ヘッダー・本文・フッターの間は空行で区切る。
-- どの行も 100 文字以内にする。
+- type・scope・フッターのキーワード（`BREAKING CHANGE` など）は英語のまま、それ以外は日本語で書く。
+- ヘッダーは 50 文字以内を目安にする。本文は読みやすい長さで改行する。
 
 ### type
 
@@ -79,44 +80,44 @@ hotfix/image-validation
 
 Google の CL 説明の指針に従い、1行目だけで「何をしたか」がわかるように書く。
 
-- 英語の命令形・現在形で書く（`add`。`added` や `adds` は使わない）。
-- 先頭は小文字にし、末尾にピリオドを付けない。
-- `fix bug` や `update code` のような、内容がわからない要約は書かない。
+- 日本語で、「〜を追加」「〜を修正」のように簡潔に書く。
+- 末尾に句点（。）を付けない。
+- 「バグ修正」「コード更新」のような、内容がわからない要約は書かない。
 
 ### body（本文）
 
 - 「何を」「なぜ」変更したかを書く。「どのように」はコードを見ればわかるので最小限でよい。
 - 背景、検討した別案、制約、既知の問題があれば書く。
-- 英語の命令形・現在形で書く。
+- 日本語で、だ・である調で書く。
 
 ### footer（フッター）
 
 - 互換性のない変更は `BREAKING CHANGE: <説明>` を書く。
 - 関連する Issue は `Closes #123` や `Refs #123` で示す。
-- `revert` の場合は本文に `This reverts commit <hash>.` と取り消す理由を書く。
+- `revert` の場合は本文に取り消すコミットのハッシュと理由を書く。
 
 ### 例
 
 ```
-feat(backend): reject non-grayscale images on upload
+feat(backend): 白黒以外の画像のアップロードを拒否
 
-Posts must contain only black-and-white images. Check every pixel
-and return 400 when R, G and B differ beyond a small tolerance,
-since JPEG compression slightly shifts gray pixels.
+投稿できるのは白黒画像のみとするため、全ピクセルを検査し、
+R・G・B の差が許容値を超える場合は 400 を返す。
+JPEG は圧縮で灰色がわずかにずれるため、許容値を設けている。
 
 Closes #12
 ```
 
 ```
-fix(frontend): keep form input after a failed upload
+fix(frontend): アップロード失敗時にフォームの入力内容を保持
 ```
 
 ```
-build(docker): add MinIO service to docker compose
+build(docker): docker compose に MinIO を追加
 ```
 
 ```
-refactor(db)!: rename posts.image_path to posts.object_key
+refactor(db)!: posts.image_path を posts.object_key に改名
 
-BREAKING CHANGE: run the 0003 migration before starting the new backend.
+BREAKING CHANGE: 新しいバックエンドを起動する前に 0003 のマイグレーションを実行すること。
 ```
