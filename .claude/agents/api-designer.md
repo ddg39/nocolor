@@ -38,7 +38,7 @@ docs/design/api/
 - 2 つ以上の API で使う型・応答・パラメータは `components/` に置き、各 Operation からは `$ref` で使う。同じ定義を書き写さない。
 - API を追加・削除したら、`openapi.yaml` の paths、`README.md` の一覧、`paths/` のファイルを必ずそろえる。
 - 他の設計書は `screens/README.md`・`screens/SCR-xx_*.md`・`db.md` のように `docs/design/` からのパスで参照する。
-- このエージェントはコマンドを実行できない。lint（`npx -y @redocly/cli@2 lint docs/design/api/openapi.yaml`）は監督が実行するので、`$ref` のパスと YAML の書式は目視で丁寧に確かめる。
+- このエージェントはコマンドを実行できない。lint（`npx -y @redocly/cli@2 lint docs/design/api/openapi.yaml --config docs/design/api/redocly.yaml`）は監督が実行するので、`$ref` のパスと YAML の書式は目視で丁寧に確かめる。
 
 `README.md` は次の構成で書く。既存の節番号は他の設計書から参照されているので、変えない。
 

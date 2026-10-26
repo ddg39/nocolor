@@ -46,7 +46,7 @@ model: opus
 
 ### 2. レビューと修正（最大 3 周）
 
-1. API 設計に変更があった場合は、レビューの前に監督が `npx -y @redocly/cli@2 lint docs/design/api/openapi.yaml` を実行する（作業者はコマンドを実行できない）。エラーがあれば API 担当に直させてから進み、結果をレビューの依頼文に含める。
+1. API 設計に変更があった場合は、レビューの前に監督が `npx -y @redocly/cli@2 lint docs/design/api/openapi.yaml --config docs/design/api/redocly.yaml` を実行する（作業者はコマンドを実行できない）。エラーがあれば API 担当に直させてから進み、結果をレビューの依頼文に含める。
 2. `design-reviewer` にレビューを依頼する。2 周目以降は前回の指摘表を依頼文に貼り、解消を確認させる。
 3. 判定が **承認** なら手順 3 へ進む。
 4. **要修正** なら、指摘を担当ごとに振り分けて修正を依頼する。互いに依存しない修正は並行で依頼する。
