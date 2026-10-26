@@ -10,8 +10,8 @@
 
 | 役割 | エージェント | モデル | 成果物 |
 | --- | --- | --- | --- |
-| 画面設計 | `screen-designer` | sonnet | `docs/design/screens.md` |
-| API 設計 | `api-designer` | sonnet | `docs/design/api.md` |
+| 画面設計 | `screen-designer` | sonnet | `docs/design/screens/`（1 画面 1 ファイル） |
+| API 設計 | `api-designer` | sonnet | `docs/design/api/`（OpenAPI 3.1.0、1 API 1 ファイル） |
 | DB 設計 | `db-designer` | sonnet | `docs/design/db.md` |
 | レビュー | `design-reviewer` | opus | 指摘と判定 |
 
