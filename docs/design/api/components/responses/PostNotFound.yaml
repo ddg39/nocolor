@@ -1,0 +1,14 @@
+description: |
+  404 `POST_NOT_FOUND`。投稿が存在しない、削除済み、またはパスの投稿 ID の形式が不正（形式不正は DB を引かずに返す。screens D-25）。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      postNotFound:
+        value:
+          error:
+            code: POST_NOT_FOUND
+            message: 投稿が見つかりません。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

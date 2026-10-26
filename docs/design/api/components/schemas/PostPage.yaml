@@ -1,0 +1,17 @@
+type: object
+title: PostPage
+description: |
+  投稿の一覧の応答（API-11、12、19）。カーソル方式のページング（README 1.7）の共通形で、`items` が投稿になる。
+  並びは `posts.id`（ULID）の降順。
+required:
+  - items
+  - next_cursor
+properties:
+  items:
+    type: array
+    maxItems: 50
+    description: 投稿。0 件以上、`limit` 件以下。
+    items:
+      $ref: ./Post.yaml
+  next_cursor:
+    $ref: ./NextCursor.yaml

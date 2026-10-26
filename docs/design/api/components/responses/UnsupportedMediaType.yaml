@@ -1,0 +1,15 @@
+description: |
+  415 `UNSUPPORTED_MEDIA_TYPE`。リクエストの `Content-Type` が想定外（JSON を受ける API に `application/json` 以外が来た）。
+  `Content-Type` が JSON 必須であることは CSRF 対策の一部でもある（README 1.4）。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      unsupportedMediaType:
+        value:
+          error:
+            code: UNSUPPORTED_MEDIA_TYPE
+            message: Content-Type が正しくありません。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

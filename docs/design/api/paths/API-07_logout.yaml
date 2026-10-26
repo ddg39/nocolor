@@ -1,0 +1,49 @@
+operationId: logout
+summary: API-07 ログアウト
+x-api-id: API-07
+tags:
+  - Auth
+description: |
+  `POST /api/auth/logout`（R-07）
+
+  ## 概要
+
+  現在のセッションを破棄する（ACC-07、6.2）。
+
+  - 関連要件 ID: ACC-07, 6.2
+  - 利用画面: 全画面（ヘッダーのメニュー）。主に SCR-01
+  - ログイン: 必須。リクエストのボディは不要。`X-CSRF-Token` ヘッダーが必要（README 1.4）。
+    Origin の検査（README 1.4 (1)）も行う。
+
+  ## エラー
+
+  - 401 `UNAUTHENTICATED`: すでにログアウト済み・期限切れ。画面は成功扱いにしてよい（screens R-07）。
+
+  ## 備考
+
+  - 使用テーブル: `sessions`（`DeleteSession`）。
+  - 副作用: 当該セッションの行を削除し、応答で Cookie `nocolor_session` を `Max-Age=0` で削除する。
+    他の端末のセッションは残す。
+  - 共通エラー: 403 `CSRF_INVALID`（Origin またはトークン）、500、503。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security:
+  - sessionCookie: []
+    csrfToken: []
+responses:
+  "204":
+    description: |
+      ログアウトした（ボディなし）。`Set-Cookie: nocolor_session=; Max-Age=0; ...` で Cookie を削除する。
+    headers:
+      Set-Cookie:
+        description: Cookie `nocolor_session` を削除する（`Max-Age=0`）。
+        required: true
+        schema:
+          type: string
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "403":
+    $ref: ../components/responses/CsrfInvalid.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

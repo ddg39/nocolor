@@ -1,0 +1,10 @@
+name: cursor
+in: query
+required: false
+description: |
+  ページング用のカーソル（README 1.7）。直前の応答の `next_cursor` をそのまま渡す。
+  省略または空文字は未指定と同じで、先頭ページを返す。不透明な文字列であり、中身を解釈・加工しない。
+  改ざん・破損・別の一覧（別のユーザー）のカーソルは 400 `INVALID_CURSOR`。有効期限は設けない。
+  カーソルは閲覧者に依存しない（誰が使っても同じ位置を指す）。
+schema:
+  type: string

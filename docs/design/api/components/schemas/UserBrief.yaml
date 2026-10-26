@@ -1,0 +1,25 @@
+type: object
+title: UserBrief
+description: |
+  ユーザーの簡易表示。投稿の `author`、API-01 の `user`、API-06 の `user` に使う。
+  「出どころ」は db.md のテーブル・カラム（DB 設計に無い項目は返さない）。メールアドレスは返さない。
+required:
+  - username
+  - display_name
+  - icon_url
+properties:
+  username:
+    $ref: ./Username.yaml
+  display_name:
+    type: string
+    description: 表示名。出どころ `users.display_name`。
+  icon_url:
+    type: [string, "null"]
+    description: |
+      アイコンの URL（`/images/{オブジェクトキー}` の相対パス。ホスト名は含めない）。未設定は `null`。
+      出どころ `users.avatar_key`（`/images/` + キー）。
+    pattern: '^/images/'
+examples:
+  - username: alice
+    display_name: Alice
+    icon_url: /images/avatars/9b2e7c40-1d3a-4f5b-8c6d-2a1e0f9b7d33.jpg

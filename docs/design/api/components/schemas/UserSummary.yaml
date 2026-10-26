@@ -1,0 +1,35 @@
+type: object
+title: UserSummary
+description: |
+  フォロー／フォロワー一覧の項目。「出どころ」は db.md のテーブル・カラム。
+required:
+  - username
+  - display_name
+  - icon_url
+  - bio
+  - is_following
+properties:
+  username:
+    $ref: ./Username.yaml
+  display_name:
+    type: string
+    description: 表示名。出どころ `users.display_name`。
+  icon_url:
+    type: [string, "null"]
+    description: アイコンの URL。未設定は `null`。出どころ `users.avatar_key`。
+    pattern: '^/images/'
+  bio:
+    type: string
+    maxLength: 160
+    description: 自己紹介。出どころ `users.bio`。
+  is_following:
+    type: boolean
+    description: |
+      閲覧者がこのユーザーをフォロー中か。未ログイン、および閲覧者自身の行は `false`（FOL。設計判断 D-17）。
+      出どころ `EXISTS FROM follows`。
+examples:
+  - username: bob
+    display_name: Bob
+    icon_url: null
+    bio: 白黒写真が好きです。
+    is_following: true

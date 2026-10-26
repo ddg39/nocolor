@@ -1,0 +1,12 @@
+type: string
+title: PostId
+description: |
+  投稿 ID。ULID の 26 文字（Crockford Base32、大文字）。応答は常に大文字。入力は小文字も受け付けて大文字に直す。
+  DB は `BINARY(16)` で、変換は backend が行う（db.md D-1）。
+  パスの ID がこの形式に合わないときは、DB を引かずに 404 `POST_NOT_FOUND` を返す（400 ではない。README 1.1）。
+minLength: 26
+maxLength: 26
+# 先頭は 0〜7。応答は大文字だが、入力では小文字も受け付けるため両方を許す。
+pattern: '^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$'
+examples:
+  - 01JC8ZQ4V6S2R9T3M7X5N1B0KD

@@ -1,0 +1,50 @@
+operationId: listFollowingTimeline
+summary: API-12 フォロー中タイムライン
+x-api-id: API-12
+tags:
+  - Timelines
+description: |
+  `GET /api/timelines/following`（R-12）
+
+  ## 概要
+
+  フォローしているユーザーと自分の投稿を新着順に返す（TML-03）。
+
+  ## 備考
+
+  - 関連要件 ID: TML-01, TML-03, TML-05, TML-06, LIK-03
+  - 利用画面: SCR-01
+  - ログイン: 必須（未ログインは 401 `UNAUTHENTICATED`）。GET なので CSRF トークンは不要。
+  - 使用テーブル: `posts`、`users`、`follows`、`likes`（`ListFollowingTimeline`）。
+  - 副作用なし。
+  - レスポンスの形式は API-11 と同じ。並びは `posts.id` の降順（README 1.7）。
+    閲覧中にフォロー関係が変わると、その人の古い投稿が次ページ以降に入る。これは意図した結果である（README 1.7）。
+  - 共通エラー: 想定外の障害は 500 `INTERNAL_ERROR`、一時的に処理できない場合は 503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドは 404 `NOT_FOUND`・405 `METHOD_NOT_ALLOWED`（README 1.1。個別の API には載せない）。
+security:
+  - sessionCookie: []
+parameters:
+  - $ref: ../components/parameters/cursor.yaml
+  - $ref: ../components/parameters/limit.yaml
+responses:
+  "200":
+    description: |
+      投稿の一覧（API-11 と同じ形式。`items` は Post）。次のページが無いときは `next_cursor` が `null`。
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/PostPage.yaml
+        examples:
+          empty:
+            summary: 0 件
+            value:
+              items: []
+              next_cursor: null
+  "400":
+    $ref: ../components/responses/InvalidPagingParams.yaml
+  "401":
+    $ref: ../components/responses/Unauthenticated.yaml
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

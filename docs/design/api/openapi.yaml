@@ -1,0 +1,187 @@
+openapi: 3.1.0
+info:
+  title: nocolor API
+  version: 0.1.0
+  description: |
+    白黒画像専用 SNS「nocolor」の REST API。要件は `docs/requirements.md`、配信構成は ADR 001、
+    共通規則・設計判断・未決事項は [README.md](./README.md) にある（本ファイルの説明中の「README 1.4」などの節番号はそれを指す）。
+
+    - ベースパスは `/api`。フロントエンドと同一オリジンで、CORS は設定しない。
+    - 形式は JSON（`application/json`、UTF-8）。画像を含む API-13・API-24 のリクエストだけ `multipart/form-data`。
+    - 認証はセッション Cookie `nocolor_session`。ログイン必須の変更系 API は、`X-CSRF-Token` ヘッダーも必要（README 1.3・1.4）。
+    - 画像は `/images/{オブジェクトキー}`（MinIO）で配信し、この API の対象外。
+    - エラーは 4xx・5xx で `Error` 形式の JSON を返す（README 1.6）。
+servers:
+  - url: /
+    description: フロントエンドと同一オリジン（パスは `/api/...` から始まる完全なパス）
+tags:
+  - name: Me
+    description: ログイン中のユーザー自身（API-01、API-24）
+  - name: Config
+    description: 画面が使う設定値（API-02）
+  - name: Auth
+    description: 登録・メール確認・ログイン・ログアウト・パスワード再設定（API-03〜API-10）
+  - name: Timelines
+    description: タイムライン（API-11、API-12）
+  - name: Posts
+    description: 投稿といいね（API-13〜API-17）
+  - name: Users
+    description: プロフィール・フォロー（API-18〜API-23）
+paths:
+  /api/me:
+    get:
+      $ref: ./paths/API-01_get-me.yaml
+  /api/me/profile:
+    put:
+      $ref: ./paths/API-24_update-profile.yaml
+  /api/config:
+    get:
+      $ref: ./paths/API-02_get-config.yaml
+  /api/auth/signup:
+    post:
+      $ref: ./paths/API-03_signup.yaml
+  /api/auth/verify:
+    post:
+      $ref: ./paths/API-04_verify-email.yaml
+  /api/auth/verify/resend:
+    post:
+      $ref: ./paths/API-05_resend-verification.yaml
+  /api/auth/login:
+    post:
+      $ref: ./paths/API-06_login.yaml
+  /api/auth/logout:
+    post:
+      $ref: ./paths/API-07_logout.yaml
+  /api/auth/password/forgot:
+    post:
+      $ref: ./paths/API-08_forgot-password.yaml
+  /api/auth/password/reset/check:
+    post:
+      $ref: ./paths/API-09_check-reset-token.yaml
+  /api/auth/password/reset:
+    post:
+      $ref: ./paths/API-10_reset-password.yaml
+  /api/timelines/global:
+    get:
+      $ref: ./paths/API-11_global-timeline.yaml
+  /api/timelines/following:
+    get:
+      $ref: ./paths/API-12_following-timeline.yaml
+  /api/posts:
+    post:
+      $ref: ./paths/API-13_create-post.yaml
+  /api/posts/{post_id}:
+    get:
+      $ref: ./paths/API-14_get-post.yaml
+    delete:
+      $ref: ./paths/API-15_delete-post.yaml
+  /api/posts/{post_id}/like:
+    put:
+      $ref: ./paths/API-16_like-post.yaml
+    delete:
+      $ref: ./paths/API-17_unlike-post.yaml
+  /api/users/{username}:
+    get:
+      $ref: ./paths/API-18_get-profile.yaml
+  /api/users/{username}/posts:
+    get:
+      $ref: ./paths/API-19_list-user-posts.yaml
+  /api/users/{username}/follow:
+    put:
+      $ref: ./paths/API-20_follow-user.yaml
+    delete:
+      $ref: ./paths/API-21_unfollow-user.yaml
+  /api/users/{username}/following:
+    get:
+      $ref: ./paths/API-22_list-following.yaml
+  /api/users/{username}/followers:
+    get:
+      $ref: ./paths/API-23_list-followers.yaml
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: nocolor_session
+      description: |
+        セッション Cookie（README 1.3）。`HttpOnly`、`SameSite=Lax`、`Path=/`、`Max-Age=2592000`（30 日の固定。延長しない）。
+        HTTPS のときは `Secure` を付ける。値は 32 バイトの乱数を Base64URL にした 43 文字で、ログインのたびに新しく発行する。
+        ログイン必須の API で Cookie が無い・不正・期限切れのときは 401 `UNAUTHENTICATED`。
+        ログイン不要・ログイン任意の API では、Cookie が無効でも 401 にせず未ログインとして処理する。
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: |
+        CSRF トークン（README 1.4 (2)）。API-01 または API-06 の応答の `csrf_token` を、ログイン必須の変更系
+        （`POST`・`PUT`・`DELETE`）のリクエストヘッダーに付ける。無い・一致しないときは 403 `CSRF_INVALID`。
+        これとは別に、状態を変更するすべてのリクエストで Origin の検査を行う（README 1.4 (1)。セキュリティスキームでは表せない）。
+  schemas:
+    Error:
+      $ref: ./components/schemas/Error.yaml
+    ErrorCode:
+      $ref: ./components/schemas/ErrorCode.yaml
+    FieldErrorCode:
+      $ref: ./components/schemas/FieldErrorCode.yaml
+    PostId:
+      $ref: ./components/schemas/PostId.yaml
+    Username:
+      $ref: ./components/schemas/Username.yaml
+    UserBrief:
+      $ref: ./components/schemas/UserBrief.yaml
+    Post:
+      $ref: ./components/schemas/Post.yaml
+    UserSummary:
+      $ref: ./components/schemas/UserSummary.yaml
+    Profile:
+      $ref: ./components/schemas/Profile.yaml
+    LikeState:
+      $ref: ./components/schemas/LikeState.yaml
+    FollowState:
+      $ref: ./components/schemas/FollowState.yaml
+    NextCursor:
+      $ref: ./components/schemas/NextCursor.yaml
+    PostPage:
+      $ref: ./components/schemas/PostPage.yaml
+    UserSummaryPage:
+      $ref: ./components/schemas/UserSummaryPage.yaml
+  parameters:
+    cursor:
+      $ref: ./components/parameters/cursor.yaml
+    limit:
+      $ref: ./components/parameters/limit.yaml
+    post_id:
+      $ref: ./components/parameters/post_id.yaml
+    username:
+      $ref: ./components/parameters/username.yaml
+  responses:
+    Unauthenticated:
+      $ref: ./components/responses/Unauthenticated.yaml
+    CsrfInvalid:
+      $ref: ./components/responses/CsrfInvalid.yaml
+    RateLimited:
+      $ref: ./components/responses/RateLimited.yaml
+    ValidationError:
+      $ref: ./components/responses/ValidationError.yaml
+    InvalidPagingParams:
+      $ref: ./components/responses/InvalidPagingParams.yaml
+    PostNotFound:
+      $ref: ./components/responses/PostNotFound.yaml
+    UserNotFound:
+      $ref: ./components/responses/UserNotFound.yaml
+    RequestTooLarge:
+      $ref: ./components/responses/RequestTooLarge.yaml
+    UnsupportedMediaType:
+      $ref: ./components/responses/UnsupportedMediaType.yaml
+    InternalError:
+      $ref: ./components/responses/InternalError.yaml
+    ServiceUnavailable:
+      $ref: ./components/responses/ServiceUnavailable.yaml
+    ServiceUnavailableQueueFull:
+      $ref: ./components/responses/ServiceUnavailableQueueFull.yaml
+    TokenInvalid:
+      $ref: ./components/responses/TokenInvalid.yaml
+    ImageTooLarge:
+      $ref: ./components/responses/ImageTooLarge.yaml
+    UnsupportedImageType:
+      $ref: ./components/responses/UnsupportedImageType.yaml

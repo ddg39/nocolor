@@ -1,0 +1,15 @@
+description: |
+  413 `REQUEST_TOO_LARGE`。JSON ボディが 16KiB を超えた（README 1.1）。
+  nginx が先に 413 を返す場合も、`error_page 413` で同じ JSON 形式にする（インフラ側の作業）。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      requestTooLarge:
+        value:
+          error:
+            code: REQUEST_TOO_LARGE
+            message: リクエストが大きすぎます。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

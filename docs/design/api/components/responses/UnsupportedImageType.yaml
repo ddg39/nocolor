@@ -1,0 +1,16 @@
+description: |
+  415。画像を含む multipart の API（API-13、24）で、`code` は次のいずれか。
+  - `UNSUPPORTED_IMAGE_TYPE`: 画像の中身が JPEG・PNG・WebP のいずれでもない（拡張子・パートの `Content-Type` は見ない。6.2）。
+  - `UNSUPPORTED_MEDIA_TYPE`: リクエストの `Content-Type` が `multipart/form-data` でない。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      unsupportedImageType:
+        value:
+          error:
+            code: UNSUPPORTED_IMAGE_TYPE
+            message: 対応していない画像形式です。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

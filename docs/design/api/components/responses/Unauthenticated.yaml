@@ -1,0 +1,17 @@
+description: |
+  401 `UNAUTHENTICATED`。ログインが必要な API で、Cookie が無い、値が不正、期限切れ、のいずれも同じ応答になる。
+  Cookie が付いていたのに無効だった場合は、応答で同名の Cookie を `Max-Age=0` で削除する。
+  ログイン失敗の 401 `INVALID_CREDENTIALS`（API-06）とは別物で、画面は `code` で分岐する。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      unauthenticated:
+        summary: セッション切れ
+        value:
+          error:
+            code: UNAUTHENTICATED
+            message: ログインが必要です。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51

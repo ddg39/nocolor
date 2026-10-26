@@ -1,0 +1,71 @@
+operationId: getConfig
+summary: API-02 設定値の取得
+x-api-id: API-02
+tags:
+  - Config
+description: |
+  `GET /api/config`（R-02）
+
+  ## 概要
+
+  画面が検査に使う設定値を返す（画像の上限など）。環境変数で変わる値を画面に持たせないために設ける。
+
+  - 関連要件 ID: PST-02, PRF-04, 6.1
+  - 利用画面: SCR-08, SCR-12
+  - ログイン: 不要。リクエストのパラメータ・ボディはない。
+
+  ## 備考
+
+  - DB は使わない。副作用なし。
+  - 文字数の上限（キャプション 500 など）は要件で固定なので含めない。
+  - `Cache-Control` は、この API だけ `public, max-age=300` としてよい（README 1.1）。
+  - 共通エラー: 想定外の障害は 500 `INTERNAL_ERROR`、一時的に処理できない場合は 503 `SERVICE_UNAVAILABLE`。
+    定義のないパス・メソッドの 404・405 は個別の API には載せない（README 1.1）。
+security: []
+responses:
+  "200":
+    description: 設定値。
+    content:
+      application/json:
+        schema:
+          type: object
+          required:
+            - max_image_bytes
+            - allowed_image_types
+            - max_image_side
+            - max_image_pixels
+          properties:
+            max_image_bytes:
+              type: integer
+              minimum: 1
+              description: 画像ファイルの最大バイト数（PST-02。環境変数 `MAX_IMAGE_BYTES`）。
+            allowed_image_types:
+              type: array
+              items:
+                type: string
+              description: 許可する形式（PST-02）。アイコンにも同じ規則を使う（screens U-05）。
+            max_image_side:
+              type: [integer, "null"]
+              minimum: 1
+              description: |
+                画像の長辺の最大 px（要件 8 章の未決の上限）。`null` は未決。
+                `null` でも、サーバーは固定の安全弁（各辺 65535px・総画素数 1 億まで。API-13 の処理順 (4)）で
+                400 `IMAGE_RESOLUTION_TOO_LARGE` を返す。
+            max_image_pixels:
+              type: [integer, "null"]
+              minimum: 1
+              description: 画像の総画素数の上限（`max_image_side` と同じ扱い）。
+        examples:
+          default:
+            value:
+              max_image_bytes: 10485760
+              allowed_image_types:
+                - image/jpeg
+                - image/png
+                - image/webp
+              max_image_side: null
+              max_image_pixels: null
+  "500":
+    $ref: ../components/responses/InternalError.yaml
+  "503":
+    $ref: ../components/responses/ServiceUnavailable.yaml

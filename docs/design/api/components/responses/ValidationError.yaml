@@ -1,0 +1,27 @@
+description: |
+  400。次のいずれか。
+  - `VALIDATION_ERROR`: 入力規則違反（README 1.9）。`error.fields` に項目名 → 項目別コード（`FieldErrorCode`）を入れる。複数の項目の違反は同時に返す。
+  - `BAD_REQUEST`: JSON として解釈できない（不正な UTF-8 を含む場合を含む）、または項目の型が違う。`fields` は `{}`。
+content:
+  application/json:
+    schema:
+      $ref: ../schemas/Error.yaml
+    examples:
+      validationError:
+        summary: 入力規則違反
+        value:
+          error:
+            code: VALIDATION_ERROR
+            message: 入力内容を確認してください。
+            fields:
+              username: TOO_SHORT
+              password: NEED_LETTER_AND_DIGIT
+            request_id: 7f3c9b1e2a4d4c0e9a51
+      badRequest:
+        summary: JSON として解釈できない
+        value:
+          error:
+            code: BAD_REQUEST
+            message: リクエストを解釈できませんでした。
+            fields: {}
+            request_id: 7f3c9b1e2a4d4c0e9a51
