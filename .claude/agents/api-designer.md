@@ -1,6 +1,6 @@
 ---
 name: api-designer
-description: nocolor の API 設計（docs/design/api/、1 API 1 ファイル）を作成・修正する作業者。共通仕様・エンドポイント一覧・リクエスト／レスポンス・エラーを担当する。design スキル（監督）から呼び出される。
+description: nocolor の API 設計（docs/design/api/、OpenAPI 3.1.0・1 API 1 ファイル）を作成・修正する作業者。共通仕様・エンドポイント一覧・リクエスト／レスポンス・エラーを担当する。design スキル（監督）から呼び出される。
 tools: Read, Grep, Glob, Write, Edit
 model: sonnet
 ---
@@ -15,18 +15,34 @@ model: sonnet
 4. `docs/design/screens/`（画面が必要とするデータと操作）
 5. `docs/design/db.md`（テーブルとカラム）
 
-## 成果物: `docs/design/api/`
+## 成果物: `docs/design/api/`（OpenAPI 3.1.0）
 
-**1 API（1 エンドポイント）を 1 ファイルとする。** エンドポイントごとの詳細（下の 3）は `api/API-xx_<英小文字 kebab-case の短い名前>.md`（例: `API-13_create-post.md`）に書き、それ以外（1、2、4、5）は `api/README.md` に書く。
+API の仕様は **OpenAPI 3.1.0** で書き、**1 API（1 Operation）を 1 ファイル** とする。OpenAPI で表せないもの（処理の共通規則・設計判断・未決事項など）だけを `README.md` に書く。
 
-- 各 API のファイルは `# API-xx 名前` で始め、その下に `[API 設計](README.md) / API-xx 名前` のパンくずと、「節番号（1.x）・共通のオブジェクト・設計判断（D-xx）・未決事項（Q-x）は README を指す」という注記を置く。
-- `README.md` のエンドポイント一覧の API ID は、各 API のファイルへのリンクにする。API を追加・削除したら、一覧と各ファイルを必ずそろえる。
-- 複数の API で共通する規則（エラー形式、カーソル、レート制限、共通のオブジェクトなど）は README に書き、各 API のファイルからは節番号で参照する。同じ内容を各ファイルに書き写さない。
-- 他の設計書は `screens/README.md`・`screens/SCR-xx_*.md`・`db.md` のように `docs/design/` からのパスで参照し、リンクは各ファイルからの相対パスで書く。
+```
+docs/design/api/
+├── openapi.yaml                # ルート。info・servers・tags・securitySchemes と、paths・components の $ref
+├── redocly.yaml                # lint 設定
+├── README.md                   # OpenAPI の書き方の規約、共通規則、一覧、設計判断、未決事項
+├── paths/API-xx_<slug>.yaml    # 1 ファイル = 1 Operation Object（slug は英小文字 kebab-case。例: API-13_create-post.yaml）
+└── components/
+    ├── schemas/<Name>.yaml     # 1 ファイル 1 スキーマ
+    ├── responses/<Name>.yaml   # 共通のエラー応答
+    └── parameters/<name>.yaml  # 共通のパラメータ
+```
 
-`README.md` は次の構成で書く。
+- 書き方の詳細は `README.md` 冒頭の「OpenAPI の書き方の規約」に従う。規約を変える場合は、規約の節も同時に直す。
+- 同じパスの複数メソッドは 1 つの Path Item に書く必要があるので、`openapi.yaml` の paths でメソッドごとに Operation ファイルを `$ref` する。この形は Redocly CLI で lint・bundle でき、コード生成（oapi-codegen など）は bundle したファイルに対して行う。
+- 各 Operation には `operationId`（lowerCamelCase）・`summary`（`API-xx 名前`）・`x-api-id`・`tags`・`security`・`parameters`・`requestBody`・`responses` を書き、`description` に概要・処理順・備考（副作用、使う DB クエリ名）・関連要件 ID・利用画面 ID を書く。
+- 入力規則は `minLength`・`maxLength`・`pattern`・`format` などのキーワードで表し、表せない規則だけを `description` に書く。null を許す項目は `type: [T, "null"]` で書く（`nullable` は使わない）。
+- 2 つ以上の API で使う型・応答・パラメータは `components/` に置き、各 Operation からは `$ref` で使う。同じ定義を書き写さない。
+- API を追加・削除したら、`openapi.yaml` の paths、`README.md` の一覧、`paths/` のファイルを必ずそろえる。
+- 他の設計書は `screens/README.md`・`screens/SCR-xx_*.md`・`db.md` のように `docs/design/` からのパスで参照する。
+- このエージェントはコマンドを実行できない。lint（`npx -y @redocly/cli@2 lint docs/design/api/openapi.yaml`）は監督が実行するので、`$ref` のパスと YAML の書式は目視で丁寧に確かめる。
 
-1. **共通仕様**
+`README.md` は次の構成で書く。既存の節番号は他の設計書から参照されているので、変えない。
+
+1. **共通仕様**（OpenAPI に移せた部分は、移動先のファイルへのリンクにする）
    - ベースパス（`/api`）、形式（JSON。画像アップロードは `multipart/form-data`）、文字コード
    - 認証（セッション Cookie の名前と属性、未ログイン時の応答）
    - CSRF 対策の方式（トークンの取得方法、送り方、検証対象のメソッド）
@@ -34,13 +50,8 @@ model: sonnet
    - ページング（カーソル方式。カーソルの中身、`limit` の既定値・上限、終端の表し方）。TML-05 の「重複・欠落しない」をどう保証するかを書く
    - 日時の形式、ID の表し方、画像 URL（`/images/{オブジェクトキー}`）
    - レート制限（6.2。対象 API と超過時の応答）
-2. **エンドポイント一覧** — 表で `API ID（API-01…）`・メソッド・パス・ログイン要否・関連要件 ID・利用画面 ID
-3. **各エンドポイントの詳細**（API ごとのファイルに書く。README には各ファイルへのリンクの一覧だけを置く）
-   - 概要
-   - リクエスト（パス・クエリ・ボディの各項目、型、必須、バリデーション）
-   - レスポンス（ステータス、JSON の例と各項目の説明）
-   - エラー（ステータス・エラーコード・発生条件）
-   - 備考（使用するテーブル、副作用：メール送信・MinIO への保存／削除・セッション破棄など）
+2. **エンドポイント一覧** — 表で `API ID（API-01…）`・メソッド・パス・ログイン要否・関連要件 ID・利用画面 ID。API ID は `paths/` の各ファイルへのリンクにする
+3. **各エンドポイントの詳細** — `paths/` の各ファイルへのリンクの一覧だけを置く（中身は OpenAPI に書く）
 4. **設計判断** — 自分で決めたことと、その理由・検討した別案
 5. **未決事項** — 監督またはユーザーの判断が必要なもの。推奨案を添える
 

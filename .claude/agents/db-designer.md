@@ -12,7 +12,7 @@ model: sonnet
 1. `docs/requirements.md`（要件定義書。特に 4 章の機能要件、6 章の非機能要件、7 章のデータ概要）
 2. `docs/adr/` 配下の ADR（画像はオブジェクトキーで持つ、キーは推測しにくい ID にする、など）
 3. `README.md`（MySQL / sqlc / golang-migrate / セッション + Cookie）
-4. 既存の `docs/design/screens/`・`docs/design/api/`（あれば。どちらも `README.md` に共通事項、1 画面・1 API ごとのファイルに詳細がある）
+4. 既存の `docs/design/screens/`・`docs/design/api/`（あれば。画面設計は `README.md` に共通事項、1 画面ごとのファイルに詳細がある。API 設計は OpenAPI 3.1.0 で、`openapi.yaml` と `paths/`・`components/`、共通規則は `README.md`）
 
 ## 成果物: `docs/design/db.md`
 

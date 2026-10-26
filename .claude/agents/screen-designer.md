@@ -20,7 +20,7 @@ model: sonnet
 
 - 各画面のファイルは `# SCR-xx 画面名` で始め、その下に `[画面設計](README.md) / SCR-xx 画面名` のパンくずと、「節番号・共通コンポーネント（C-xx）・設計判断（D-xx）・未決事項（U-xx）は README を指す」という注記を置く。
 - `README.md` の画面一覧の画面 ID は、各画面のファイルへのリンクにする。画面を追加・削除したら、一覧と各ファイルを必ずそろえる。
-- 他の設計書は `api/README.md`・`api/API-xx_*.md`・`db.md` のように `docs/design/` からのパスで参照し、リンクは各ファイルからの相対パスで書く。
+- 他の設計書は `api/README.md`・`api/paths/API-xx_*.yaml`（OpenAPI）・`db.md` のように `docs/design/` からのパスで参照し、リンクは各ファイルからの相対パスで書く。
 
 `README.md` は次の構成で書く。
 
